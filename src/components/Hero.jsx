@@ -249,24 +249,11 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                       </motion.p>
 
                       <motion.button
+                        className="hero-cta-btn"
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.5, delay: 0.8 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        style={{
-                          backgroundColor: '#FFD700',
-                          color: '#000',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '1rem 2rem',
-                          fontSize: '1rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          width: '100%',
-                          transition: 'all 0.3s ease',
-                          boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)'
-                        }}
+                        whileTap={{ scale: 0.96 }}
                       >
                         {slide.buttonText}
                       </motion.button>

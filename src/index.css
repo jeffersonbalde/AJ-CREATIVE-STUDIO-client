@@ -36,7 +36,26 @@ label {
 
 /* ===== HERO RESPONSIVE LAYOUT ===== */
 .hero-wrapper {
-  min-height: 100vh;
+  /* Let the hero height be defined by its content instead of forcing full viewport height */
+  min-height: auto;
+}
+
+.hero-cta-btn {
+  background-color: #FFD700;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+  transition: background-color 0.12s ease-out;
+}
+
+.hero-cta-btn:hover {
+  background-color: #FF8A00;
 }
 
 @media (max-width: 767.98px) {

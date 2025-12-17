@@ -6,7 +6,7 @@ import Home from './pages/Home';
 const App = () => {
   return (
     <Router>
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />
