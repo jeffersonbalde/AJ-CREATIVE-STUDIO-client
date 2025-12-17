@@ -1,0 +1,15 @@
+.navbar-menu-link {
+  color: #000000;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s ease, transform 0.18s ease;
+}
+
+.navbar-menu-link:hover,
+.navbar-menu-link:focus-visible {
+  color: #b30000; /* darker, high-contrast hover color */
+  text-decoration: none;
+  transform: translateY(-1px);
+}
