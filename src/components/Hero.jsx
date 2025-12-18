@@ -1,12 +1,52 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination, Autoplay } from 'swiper/modules';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 
 const Hero = ({ onSlideChange, swiperRef }) => {
+  const [scrollDirection, setScrollDirection] = useState("down");
+  const [isVisible, setIsVisible] = useState(false);
+  const lastScrollY = useRef(0);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    // Track scroll direction
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const direction = currentScrollY > lastScrollY.current ? "down" : "up";
+      setScrollDirection(direction);
+      lastScrollY.current = currentScrollY;
+    };
+
+    // Observe section visibility
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsVisible(entry.isIntersecting);
+        });
+      },
+      {
+        threshold: 0.1,
+        rootMargin: "0px",
+      }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      if (sectionRef.current) {
+        observer.unobserve(sectionRef.current);
+      }
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
   const slides = [
     {
       title: 'Need a Christmas Planner?',
@@ -41,28 +81,40 @@ const Hero = ({ onSlideChange, swiperRef }) => {
   ];
 
   return (
-    <div
-      className="hero-wrapper"
-      style={{ 
-        backgroundColor: '#F5F5F0',
-        position: 'relative'
-      }}
-    >
-      {/* Slider area wrapper so background pattern is only behind the hero slider */}
-      <div style={{ position: 'relative' }}>
-        {/* Background pattern (same styling as old code, but scoped to this wrapper) */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            opacity: 0.1,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            pointerEvents: 'none',
-          }}
-        ></div>
+    <section ref={sectionRef} className="hero-wrapper" style={{ 
+      backgroundColor: '#FFFFFF',
+      position: 'relative',
+      // Match horizontal padding pattern of ShopByCategory (3rem top, 1rem sides, 4rem bottom)
+      padding: '3rem 1rem 4rem',
+    }}>
+      {/* Background pattern covering the entire hero-wrapper area */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isVisible ? 0.1 : 0 }}
+        transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundSize: '60px 60px',
+          backgroundRepeat: 'repeat',
+          pointerEvents: 'none',
+        }}
+      />
+      {/* Slider area wrapper */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ 
+          opacity: isVisible ? 1 : 0,
+        }}
+        transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
+        style={{ position: 'relative' }}
+      >
 
         <Swiper
           className="hero-swiper"
@@ -97,20 +149,30 @@ const Hero = ({ onSlideChange, swiperRef }) => {
             }
           }}
           style={{ 
-            paddingTop: '3rem',
-            paddingBottom: '3rem',
+            paddingTop: '0',
+            paddingBottom: '2.25rem',
           }}
         >
         {slides.map((slide, index) => (
           <SwiperSlide key={index}>
-            <div className="container h-100">
+            {/* Match horizontal container behavior of ShopByCategory */}
+            <div
+              style={{
+                maxWidth: '1100px',
+                margin: '0 auto',
+                height: '100%',
+              }}
+            >
               <div className="row h-100 align-items-center">
                 <div className="col-lg-6 col-md-6">
                   <motion.div
                     initial={{ opacity: 0, x: -50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
-                    style={{ position: 'relative', zIndex: 2 }}
+                    animate={{ 
+                      opacity: isVisible ? 1 : 0,
+                      x: isVisible ? 0 : -50
+                    }}
+                    transition={{ duration: 1.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ position: 'relative', zIndex: 2, pointerEvents: isVisible ? 'auto' : 'none' }}
                   >
                     {/* Laptop mockup */}
                     <div style={{
@@ -201,13 +263,17 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                 <div className="col-lg-6 col-md-6">
                   <motion.div
                     initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.8, delay: 0.4 }}
+                    animate={{ 
+                      opacity: isVisible ? 1 : 0,
+                      x: isVisible ? 0 : 50
+                    }}
+                    transition={{ duration: 1.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
                     style={{ 
                       position: 'relative', 
                       zIndex: 2,
                       marginTop: '2rem',
-                      marginBottom: '2rem'
+                      marginBottom: '2rem',
+                      pointerEvents: isVisible ? 'auto' : 'none'
                     }}
                   >
                     <div style={{
@@ -221,8 +287,11 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                     }}>
                       <motion.h1
                         initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, delay: 0.6 }}
+                        animate={{ 
+                          opacity: isVisible ? 1 : 0,
+                          y: isVisible ? 0 : 20
+                        }}
+                        transition={{ duration: 1.6, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
                         style={{
                           fontSize: '2.5rem',
                           fontWeight: '700',
@@ -236,8 +305,11 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                       
                       <motion.p
                         initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, delay: 0.7 }}
+                        animate={{ 
+                          opacity: isVisible ? 1 : 0,
+                          y: isVisible ? 0 : 20
+                        }}
+                        transition={{ duration: 1.6, delay: 0.7, ease: [0.16, 1, 0.3, 1] }}
                         style={{
                           fontSize: '1.1rem',
                           color: '#333',
@@ -251,8 +323,11 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                       <motion.button
                         className="hero-cta-btn"
                         initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.5, delay: 0.8 }}
+                        animate={{ 
+                          opacity: isVisible ? 1 : 0,
+                          scale: isVisible ? 1 : 0.9
+                        }}
+                        transition={{ duration: 1.6, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
                         whileTap={{ scale: 0.96 }}
                       >
                         {slide.buttonText}
@@ -265,8 +340,8 @@ const Hero = ({ onSlideChange, swiperRef }) => {
           </SwiperSlide>
         ))}
         </Swiper>
-      </div>
-    </div>
+      </motion.div>
+    </section>
   );
 };
 

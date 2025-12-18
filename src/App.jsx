@@ -8,7 +8,8 @@ const App = () => {
     <Router>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Navbar />
-        <Routes>
+        <div className="main-content-wrapper">
+          <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/bundles" element={<Home />} />
           <Route path="/planners" element={<Home />} />
@@ -17,7 +18,8 @@ const App = () => {
           <Route path="/social-media" element={<Home />} />
           <Route path="/productivity" element={<Home />} />
           <Route path="/printables" element={<Home />} />
-        </Routes>
+          </Routes>
+        </div>
       </div>
     </Router>
   );
