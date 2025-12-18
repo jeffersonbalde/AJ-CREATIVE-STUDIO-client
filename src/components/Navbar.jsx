@@ -59,7 +59,6 @@ const Navbar = () => {
   const navLinks = [
     'Home',
     'All Products',
-    'Bundle Builder',
     'Contact',
   ];
 
