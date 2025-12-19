@@ -16,6 +16,16 @@ const Navbar = () => {
   useEffect(() => {
     // Close the mobile menu on route change
     setMobileOpen(false);
+
+    // Temporarily disable global smooth scrolling so the jump to top is instant
+    const root = document.documentElement;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+
+    window.scrollTo(0, 0);
+
+    // Restore previous scroll behavior after the jump
+    root.style.scrollBehavior = previousScrollBehavior || '';
   }, [location.pathname]);
 
   // Update navbar height when it changes (e.g., mobile menu opens/closes)
@@ -151,12 +161,18 @@ const Navbar = () => {
           {/* Center - Menu items (desktop only) */}
           <div className="d-none d-lg-flex align-items-center gap-4">
             {navLinks.map((link) => {
-              const isActive = location.pathname === '/' && link === 'Home' 
-                || location.pathname !== '/' && location.pathname.includes(link.toLowerCase().replace(/\s+/g, '-'));
+              const getPath = () => {
+                if (link === 'Home') return '/';
+                if (link === 'All Products') return '/all-products';
+                return `/${link.toLowerCase().replace(/\s+/g, '-')}`;
+              };
+              const path = getPath();
+              const isActive = location.pathname === path || 
+                (link === 'All Products' && location.pathname === '/all-products');
               return (
                 <Link
                   key={link}
-                  to={link === 'Home' ? '/' : `/${link.toLowerCase().replace(/\s+/g, '-')}`}
+                  to={path}
                   className="nav-link px-0 navbar-menu-link"
                   style={{
                     textDecoration: isActive ? 'underline' : 'none',
@@ -313,12 +329,18 @@ const Navbar = () => {
               >
                 <div className="navbar-nav text-center">
                   {navLinks.map((link, index) => {
-                    const isActive = location.pathname === '/' && link === 'Home' 
-                      || location.pathname !== '/' && location.pathname.includes(link.toLowerCase().replace(/\s+/g, '-'));
+                    const getPath = () => {
+                      if (link === 'Home') return '/';
+                      if (link === 'All Products') return '/all-products';
+                      return `/${link.toLowerCase().replace(/\s+/g, '-')}`;
+                    };
+                    const path = getPath();
+                    const isActive = location.pathname === path || 
+                      (link === 'All Products' && location.pathname === '/all-products');
                     return (
                       <Link
                         key={index}
-                        to={link === 'Home' ? '/' : `/${link.toLowerCase().replace(/\s+/g, '-')}`}
+                        to={path}
                         className="nav-link py-2 navbar-menu-link"
                         style={{
                           textDecoration: isActive ? 'underline' : 'none',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const products = [
   {
@@ -500,7 +501,8 @@ const MostPopular = () => {
           viewport={{ once: false, margin: '-100px' }}
           transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          <button
+          <Link
+            to="/all-products"
             className="most-popular-view-all"
             style={{
               padding: '0.75rem 2rem',
@@ -513,10 +515,12 @@ const MostPopular = () => {
               cursor: 'pointer',
               transition: 'all 0.4s ease',
               boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)',
+              textDecoration: 'none',
+              display: 'inline-block'
             }}
           >
             View all Spreadsheets
-          </button>
+          </Link>
         </motion.div>
       </div>
     </section>

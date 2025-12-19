@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
+import Products from './pages/Products';
 
 const App = () => {
   return (
@@ -11,6 +12,7 @@ const App = () => {
         <div className="main-content-wrapper">
           <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/all-products" element={<Products />} />
           <Route path="/bundles" element={<Home />} />
           <Route path="/planners" element={<Home />} />
           <Route path="/small-business" element={<Home />} />

@@ -180,8 +180,20 @@ const EmailSubscribeFooter = () => {
                 margin: 0,
                 cursor: 'pointer',
                 color: '#444',
-                textDecoration: 'none',
                 fontSize: '0.95rem',
+                // small spacing before the underline
+                paddingBottom: '2px',
+                // use border-bottom as underline so we can control thickness
+                borderBottom: '2px solid transparent',
+                transition: 'color 0.18s ease, border-color 0.18s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#000000';
+                e.currentTarget.style.borderBottomColor = '#000000';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#444';
+                e.currentTarget.style.borderBottomColor = 'transparent';
               }}
             >
               {link}
@@ -251,7 +263,7 @@ const EmailSubscribeFooter = () => {
             color: '#777',
           }}
         >
-          © {new Date().getFullYear()}, AJ Creative Studio.
+          © {new Date().getFullYear()}, AJ Creative Studio. All rights reserved.
         </motion.div>
       </div>
     </section>

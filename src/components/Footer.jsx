@@ -15,7 +15,7 @@ const Footer = ({ currentSlide = 1, totalSlides = 5, onPrevious, onNext }) => {
       }}
     >
       <div className="container">
-        <div className="row justify-content-center align-items-center">
+        <div className="row justify-content-center align-items-center mb-2">
           <div className="col-auto">
             <div className="d-flex align-items-center">
               <button
@@ -49,6 +49,19 @@ const Footer = ({ currentSlide = 1, totalSlides = 5, onPrevious, onNext }) => {
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="row justify-content-center">
+          <div className="col-auto">
+            <span
+              style={{
+                fontSize: '0.85rem',
+                color: '#666',
+              }}
+            >
+              © 2025, AJ Creative Studio. All rights reserved.
+            </span>
           </div>
         </div>
       </div>

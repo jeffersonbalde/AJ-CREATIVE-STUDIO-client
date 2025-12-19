@@ -282,7 +282,7 @@ const NewArrivals = () => {
   return (
     <section ref={sectionRef} className="new-arrivals" style={{
       padding: '3rem 1rem 4rem',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#F3F3F3',
     }}>
       <div
         className="new-arrivals-container"
