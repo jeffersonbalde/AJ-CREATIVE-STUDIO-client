@@ -53,21 +53,20 @@ label {
 }
 
 .hero-cta-btn {
-  background-color: #FFD700;
-  color: #000;
-  border: none;
-  border-radius: 8px;
-  padding: 1rem 2rem;
-  font-size: 1rem;
-  font-weight: 600;
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 0.9rem 1.5rem !important;
+  font-size: 0.98rem !important;
+  font-weight: 600 !important;
   cursor: pointer;
-  width: 100%;
-  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
-  transition: background-color 0.12s ease-out;
+  transition: background-color 0.3s ease !important;
 }
 
 .hero-cta-btn:hover {
-  background-color: #FF8A00;
+  background-color: #333333 !important; /* dark grey shade */
+  color: #FFFFFF !important;
 }
 
 @media (max-width: 767.98px) {
@@ -303,14 +302,12 @@ label {
 
 /* Most Popular View All Button Hover Effect */
 .most-popular-view-all {
-  transition: all 0.4s ease !important;
+  transition: background-color 0.3s ease !important;
 }
 
 .most-popular-view-all:hover {
-  background-color: #FF8A00 !important;
-  color: #000 !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 138, 0, 0.3);
+  background-color: #333333 !important; /* dark grey shade */
+  color: #FFFFFF !important;
 }
 
 /* Most Popular Product Title Underline on Hover */
@@ -380,11 +377,13 @@ label {
 }
 
 /* Video Tutorials CTA Button Hover Effect */
+.video-tutorials-cta {
+  transition: background-color 0.3s ease !important;
+}
+
 .video-tutorials-cta:hover {
-  background-color: #FF8A00 !important;
-  color: #000 !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 138, 0, 0.3) !important;
+  background-color: #333333 !important; /* dark grey shade */
+  color: #FFFFFF !important;
 }
 
 /* ===== HOW IT WORKS SECTION RESPONSIVE ===== */

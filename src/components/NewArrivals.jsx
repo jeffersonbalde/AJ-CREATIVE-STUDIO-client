@@ -204,8 +204,10 @@ const NewArrivals = () => {
                   style={{
                     textDecoration: 'none',
                     color: 'inherit',
-                    display: 'block',
+                    display: 'flex',
+                    flexDirection: 'column',
                     height: '100%',
+                    flex: 1,
                   }}
                 >
                   {/* Header banner (exactly like Products.jsx) */}
@@ -223,6 +225,9 @@ const NewArrivals = () => {
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {product.title.toUpperCase()}

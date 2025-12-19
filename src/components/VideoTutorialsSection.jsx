@@ -140,21 +140,20 @@ const VideoTutorialsSection = () => {
           viewport={{ once: false, margin: '-50px' }}
           transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
         >
-          <button
+          <motion.button
+            whileHover={{ y: -2, backgroundColor: '#222222' }}
+            whileTap={{ y: 0 }}
+            type="button"
             className="video-tutorials-cta"
             style={{
-              padding: '0.75rem 2rem',
-              backgroundColor: '#FFD700',
-              color: '#000',
+              padding: '0.9rem 1.5rem',
+              backgroundColor: '#000000',
+              color: '#FFFFFF',
               border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.95rem',
+              borderRadius: '4px',
+              fontSize: '0.98rem',
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.4s ease',
-              boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)',
-              display: 'inline-block',
-              minWidth: 'auto',
             }}
             onClick={() => {
               // Open YouTube channel in new tab
@@ -162,7 +161,7 @@ const VideoTutorialsSection = () => {
             }}
           >
             Browse Our Video Tutorials
-          </button>
+          </motion.button>
         </motion.div>
       </div>
     </section>

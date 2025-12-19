@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getProductImage } from '../pages/Products';
 
 // Helper to match slug style used in Products.jsx
@@ -37,7 +37,7 @@ const products = [
   },
   {
     id: 3,
-    title: 'Budget Tracker Spreadsheet',
+    title: 'Comprehensive Budget Tracker Spreadsheet with Advanced Financial Analytics and Monthly Reporting Features',
     oldPrice: '₱450.00',
     newPrice: '₱380.00',
     imageType: 'budget',
@@ -98,6 +98,7 @@ const products = [
 ];
 
 const MostPopular = () => {
+  const navigate = useNavigate();
   const [scrollDirection, setScrollDirection] = useState('down');
   const [visibleItems, setVisibleItems] = useState({});
   const lastScrollY = useRef(0);
@@ -244,8 +245,10 @@ const MostPopular = () => {
                   style={{
                     textDecoration: 'none',
                     color: 'inherit',
-                    display: 'block',
+                    display: 'flex',
+                    flexDirection: 'column',
                     height: '100%',
+                    flex: 1,
                   }}
                 >
                   {/* Header banner (exactly like Products.jsx) */}
@@ -263,6 +266,9 @@ const MostPopular = () => {
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {product.title.toUpperCase()}
@@ -442,26 +448,25 @@ const MostPopular = () => {
           viewport={{ once: false, margin: '-100px' }}
           transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Link
-            to="/all-products"
+          <motion.button
+            whileHover={{ y: -2, backgroundColor: '#222222' }}
+            whileTap={{ y: 0 }}
+            type="button"
+            onClick={() => navigate('/all-products')}
             className="most-popular-view-all"
             style={{
-              padding: '0.75rem 2rem',
-              backgroundColor: '#FFD700',
-              color: '#000',
+              padding: '0.9rem 1.5rem',
+              backgroundColor: '#000000',
+              color: '#FFFFFF',
               border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.95rem',
+              borderRadius: '4px',
+              fontSize: '0.98rem',
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.4s ease',
-              boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)',
-              textDecoration: 'none',
-              display: 'inline-block',
             }}
           >
             View all spreadsheets
-          </Link>
+          </motion.button>
         </motion.div>
       </div>
     </section>

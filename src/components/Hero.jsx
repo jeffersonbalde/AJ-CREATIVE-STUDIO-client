@@ -297,7 +297,8 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                           fontWeight: '700',
                           color: '#000',
                           marginBottom: '1rem',
-                          lineHeight: '1.2'
+                          lineHeight: '1.2',
+                          textAlign: 'center',
                         }}
                       >
                         {slide.title}
@@ -314,24 +315,38 @@ const Hero = ({ onSlideChange, swiperRef }) => {
                           fontSize: '1.1rem',
                           color: '#333',
                           marginBottom: '2rem',
-                          lineHeight: '1.6'
+                          lineHeight: '1.6',
+                          textAlign: 'center',
                         }}
                       >
                         {slide.subtitle}
                       </motion.p>
 
-                      <motion.button
-                        className="hero-cta-btn"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ 
-                          opacity: isVisible ? 1 : 0,
-                          scale: isVisible ? 1 : 0.9
-                        }}
-                        transition={{ duration: 1.6, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                        whileTap={{ scale: 0.96 }}
-                      >
-                        {slide.buttonText}
-                      </motion.button>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <motion.button
+                          className="hero-cta-btn"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ 
+                            opacity: isVisible ? 1 : 0,
+                            scale: isVisible ? 1 : 0.9
+                          }}
+                          transition={{ duration: 1.6, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                          whileHover={{ y: -2, backgroundColor: '#222222' }}
+                          whileTap={{ y: 0 }}
+                          style={{
+                            padding: '0.9rem 1.5rem',
+                            backgroundColor: '#000000',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.98rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {slide.buttonText}
+                        </motion.button>
+                      </div>
                     </div>
                   </motion.div>
                 </div>
