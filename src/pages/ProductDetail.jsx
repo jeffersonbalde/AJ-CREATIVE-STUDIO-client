@@ -9,35 +9,42 @@ import shopeePayLogo from '../assets/images/shopeepay-logo.jpg';
 import sevenElevenLogo from '../assets/images/7eleven-logo.png';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
 
-const ProductDetail = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const numericId = Number(id);
-  const product = allProducts.find((p) => p.id === numericId);
+// Helper function to convert slug back to readable title
+const slugToTitle = (slug) => {
+  return slug
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+    .replace(/\bAnd\b/gi, '&');
+};
 
+// Create dummy product when not found
+const createDummyProduct = (slug) => {
+  const title = slugToTitle(slug);
+  return {
+    id: 999,
+    title: title,
+    subtitle: 'Professional digital template for your needs',
+    price: 299.0,
+    oldPrice: 499.0,
+    onSale: true,
+    category: 'Digital',
+    availability: 'In Stock',
+    imageType: 'default',
+    color: '#4CAF50',
+    accentColor: '#2E7D32',
+    slug: slug,
+  };
+};
+
+const ProductDetail = () => {
+  const { slug } = useParams();
+  const navigate = useNavigate();
+  let product = allProducts.find((p) => p.slug === slug);
+
+  // If product not found, create a dummy product
   if (!product) {
-    return (
-      <div style={{ padding: '3rem 1rem', maxWidth: '1100px', margin: '0 auto' }}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          style={{
-            marginBottom: '1.5rem',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            color: '#000',
-            fontSize: '0.95rem',
-            textDecoration: 'underline',
-          }}
-        >
-          ← Back to products
-        </button>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 600, marginBottom: '0.75rem' }}>Product not found</h1>
-        <p style={{ color: '#555' }}>The product you are looking for does not exist or may have been moved.</p>
-      </div>
-    );
+    product = createDummyProduct(slug);
   }
 
   const paymentLogos = [

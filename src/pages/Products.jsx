@@ -3,6 +3,17 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
 
+// Helper function to convert title to URL-friendly slug
+const createSlug = (title) => {
+  return title
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim();
+};
+
 // Sample products data - in a real app, this would come from an API
 export const allProducts = [
 
@@ -347,6 +358,11 @@ export const allProducts = [
   })),
 
 ];
+
+// Add slug property to all products
+allProducts.forEach(product => {
+  product.slug = createSlug(product.title);
+});
 
 // Generate product mockup image
 export const getProductImage = (imageType, bgColor, accentColor) => {
@@ -1815,7 +1831,7 @@ const Products = () => {
                     className="product-card"
                   >
                     <Link
-                      to={`/products/${product.id}`}
+                      to={`/products/${product.slug}`}
                       style={{
                         textDecoration: 'none',
                         color: 'inherit',
