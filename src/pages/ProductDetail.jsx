@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { allProducts, getProductImage } from './Products';
 import gcashLogo from '../assets/images/gcash-logo.jpg';
 import mayaLogo from '../assets/images/maya-logo.png';
@@ -8,6 +10,17 @@ import grabPayLogo from '../assets/images/grabpay-logo.png';
 import shopeePayLogo from '../assets/images/shopeepay-logo.jpg';
 import sevenElevenLogo from '../assets/images/7eleven-logo.png';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+
+// Import all product sample images
+import productImage1 from '../assets/images/digital_product_sample/1.webp';
+import productImage2 from '../assets/images/digital_product_sample/2.webp';
+import productImage3 from '../assets/images/digital_product_sample/3.webp';
+import productImage4 from '../assets/images/digital_product_sample/4.webp';
+import productImage5 from '../assets/images/digital_product_sample/5.webp';
+import productImage6 from '../assets/images/digital_product_sample/6.webp';
+import productImage7 from '../assets/images/digital_product_sample/7.webp';
+import productImage8 from '../assets/images/digital_product_sample/8.webp';
+import productImage9 from '../assets/images/digital_product_sample/9.webp';
 
 // Helper function to convert slug back to readable title
 const slugToTitle = (slug) => {
@@ -168,6 +181,110 @@ const ProductDetail = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [expandedFaq, setExpandedFaq] = useState(null);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [selectedSort, setSelectedSort] = useState('Most Recent');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewContent, setReviewContent] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [displayNameExample, setDisplayNameExample] = useState('John Smith');
+  const [displayNameExampleDropdownOpen, setDisplayNameExampleDropdownOpen] = useState(false);
+  const displayNameExampleDropdownRef = useRef(null);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]);
+  const fileInputRef = useRef(null);
+  const MAX_FILE_SIZE_MB = 5; // Maximum file size in MB
+  const sortDropdownRef = useRef(null);
+  const reviewFormRef = useRef(null);
+  const reviewTitleInputRef = useRef(null);
+  const successMessageRef = useRef(null);
+  const refreshButtonRef = useRef(null);
+  const customerReviewsSectionRef = useRef(null);
+  
+  const reviewsPerPage = 5;
+  
+  // Check if mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 992);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  const sortOptions = [
+    'Most Recent',
+    'Highest Rating',
+    'Lowest Rating',
+    'Only Pictures',
+    'Pictures First',
+    'Videos First',
+    'Most Helpful',
+  ];
+  
+  const displayNameOptions = [
+    'John Smith',
+    'John S.',
+    'John',
+    'J.S.',
+    'Anonymous',
+  ];
+  
+  // Scroll to review form and focus title input when form opens
+  useEffect(() => {
+    if (showReviewForm && reviewFormRef.current && reviewTitleInputRef.current) {
+      // Fast scroll directly to the review form div (skipping Customer Reviews title)
+      setTimeout(() => {
+        const element = reviewFormRef.current;
+        if (element) {
+          const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+          const offsetPosition = elementPosition - 20; // Small offset from top
+          
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+          
+          // Focus the title input after scroll
+          setTimeout(() => {
+            reviewTitleInputRef.current?.focus();
+          }, 300);
+        }
+      }, 100);
+    }
+  }, [showReviewForm]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
+        setSortDropdownOpen(false);
+      }
+      if (displayNameExampleDropdownRef.current && !displayNameExampleDropdownRef.current.contains(event.target)) {
+        setDisplayNameExampleDropdownOpen(false);
+      }
+    };
+    
+    if (sortDropdownOpen || displayNameExampleDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [sortDropdownOpen, displayNameExampleDropdownOpen]);
+  
   let product = allProducts.find((p) => p.slug === slug);
 
   // If product not found, create a dummy product
@@ -187,49 +304,113 @@ const ProductDetail = () => {
     { name: '7-Eleven', src: sevenElevenLogo },
   ];
 
-  const heroImage = getProductImage(product.imageType, product.color, product.accentColor);
+  // Product images array for gallery - using all sample images
+  const productImages = [
+    { src: productImage1, alt: `${product.title} - Image 1` },
+    { src: productImage2, alt: `${product.title} - Image 2` },
+    { src: productImage3, alt: `${product.title} - Image 3` },
+    { src: productImage4, alt: `${product.title} - Image 4` },
+    { src: productImage5, alt: `${product.title} - Image 5` },
+    { src: productImage6, alt: `${product.title} - Image 6` },
+    { src: productImage7, alt: `${product.title} - Image 7` },
+    { src: productImage8, alt: `${product.title} - Image 8` },
+    { src: productImage9, alt: `${product.title} - Image 9` },
+  ];
+  
+  const handleImageChange = (index) => {
+    setCurrentImageIndex(index);
+  };
+  
+  const handlePreviousImage = () => {
+    setCurrentImageIndex((prev) => (prev === 0 ? productImages.length - 1 : prev - 1));
+  };
+  
+  const handleNextImage = () => {
+    setCurrentImageIndex((prev) => (prev === productImages.length - 1 ? 0 : prev + 1));
+  };
+  
 
   const reviews = [
     {
       id: 1,
       name: 'Anonymous',
-      title: 'Convenient and easy to use',
-      text: 'Everything is laid out clearly. It only took me a few minutes to set up my own tracker.',
+      rating: 5,
+      title: 'convenient and easy to',
+      text: 'convenient and easy to use.',
       date: '10/18/2025',
+      verified: true,
     },
     {
       id: 2,
-      name: 'JRV A.',
-      title: '5 STARS! Very helpful',
-      text: 'Helped me keep my bookings and expenses organized. Highly recommended.',
-      date: '09/08/2025',
+      name: 'Anonymous',
+      rating: 5,
+      title: '',
+      text: 'User friendly.',
+      date: '09/22/2025',
+      verified: true,
     },
     {
       id: 3,
+      name: 'JRV A.',
+      rating: 5,
+      title: '5 STARS! Very helpful',
+      text: 'Helped me keep my bookings and expenses organized. Highly recommended.',
+      date: '09/08/2025',
+      verified: false,
+    },
+    {
+      id: 4,
       name: 'L.K.',
+      rating: 5,
       title: 'Super useful',
       text: 'I liked it so much that I grabbed more templates from AJ Creative Studio.',
       date: '10/08/2024',
+      verified: false,
+    },
+    {
+      id: 5,
+      name: 'Anonymous',
+      rating: 5,
+      title: '',
+      text: 'Great product!',
+      date: '08/15/2024',
+      verified: true,
+    },
+    {
+      id: 6,
+      name: 'Anonymous',
+      rating: 5,
+      title: '',
+      text: 'Very helpful template.',
+      date: '07/20/2024',
+      verified: true,
     },
   ];
 
-  const averageRating = 5.0;
+  // Calculate average rating and star distribution
+  const averageRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
   const totalReviews = reviews.length;
+  const starDistribution = [5, 4, 3, 2, 1].map(star => ({
+    stars: star,
+    count: reviews.filter(r => r.rating === star).length,
+  }));
+  
+  // Pagination logic
+  const totalPages = Math.ceil(reviews.length / reviewsPerPage);
+  const indexOfLastReview = currentPage * reviewsPerPage;
+  const indexOfFirstReview = indexOfLastReview - reviewsPerPage;
+  const paginatedReviews = reviews.slice(indexOfFirstReview, indexOfLastReview);
+  
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <>
-      <section
-        style={{
-          padding: '3rem 1rem 4rem',
-          backgroundColor: '#FFFFFF',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: '1100px',
-            margin: '0 auto',
-          }}
-        >
+      <section style={{ padding: '3rem 1rem 4rem', backgroundColor: '#FFFFFF' }} className="product-detail-section">
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+
           {/* Back link */}
           <button
             type="button"
@@ -257,345 +438,159 @@ const ProductDetail = () => {
               alignItems: 'flex-start',
               marginBottom: '3rem',
             }}
+            className="product-detail-main-layout"
           >
             {/* Left Column: Feature Blocks with Images */}
             <div>
-              {/* Product Banner Section */}
-              <div
-                style={{
-                  backgroundColor: product.color || '#4CAF50',
-                  padding: '2rem',
-                  borderRadius: '8px',
-                  marginBottom: '2rem',
-                  textAlign: 'left',
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: 'clamp(1.5rem, 3vw, 2rem)',
-                    fontWeight: 700,
-                    color: '#FFFFFF',
-                    marginBottom: '0.75rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {product.title.toUpperCase()}
-                </h2>
+              {/* Main Product Images - Responsive Gallery */}
+              <div style={{ marginBottom: '2rem' }}>
+                {/* Main Image Display */}
                 <div
                   style={{
-                    fontSize: '0.95rem',
-                    color: '#FFFFFF',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <span>Track All Client Details</span>
-                  <span>|</span>
-                  <span>Track Client Tasks & Priority</span>
-                  <span>|</span>
-                  <span>Automatic Client Dashboard</span>
-                </div>
-              </div>
-
-              {/* Main Product Images */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '1rem',
-                  marginBottom: '2rem',
-                }}
-              >
-                <div
-                  style={{
+                    position: 'relative',
                     backgroundColor: '#F5F5F5',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     border: '1px solid #E0E0E0',
+                    marginBottom: '1rem',
                   }}
                 >
                   <img
-                    src={heroImage}
-                    alt={`${product.title} - Desktop View`}
+                    src={productImages[currentImageIndex].src}
+                    alt={productImages[currentImageIndex].alt}
                     style={{
                       width: '100%',
                       height: 'auto',
                       display: 'block',
                     }}
                   />
-                </div>
-                <div
-                  style={{
-                    backgroundColor: '#F5F5F5',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    border: '1px solid #E0E0E0',
-                  }}
-                >
-                  <img
-                    src={getProductImage(product.imageType, product.color, product.accentColor)}
-                    alt={`${product.title} - Mobile View`}
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Google Sheets Compatibility Banner */}
-              <div
-                style={{
-                  backgroundColor: product.color || '#4CAF50',
-                  padding: '1rem 1.5rem',
-                  borderRadius: '8px',
-                  marginBottom: '2rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                }}
-              >
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="3" y="3" width="18" height="18" rx="2" fill="#34A853"/>
-                    <rect x="3" y="3" width="18" height="6" fill="#188038"/>
-                    <line x1="9" y1="3" x2="9" y2="21" stroke="#FFFFFF" strokeWidth="1.5"/>
-                    <line x1="3" y1="9" x2="21" y2="9" stroke="#FFFFFF" strokeWidth="1.5"/>
-                    <rect x="4" y="4" width="4" height="4" fill="#FFFFFF" opacity="0.3"/>
-                  </svg>
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.95rem',
-                    color: '#FFFFFF',
-                    fontWeight: 500,
-                  }}
-                >
-                  Google Sheets Document | Easy to use | Mobile Compatibility
-                </div>
-              </div>
-
-              {/* Feature Blocks with Screenshots - Left Aligned Images */}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.5rem',
-                }}
-              >
-                {/* Feature Block 1 */}
-                <div
-                  style={{
-                    border: '1px solid #E0E0E0',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <div
-                    style={{
-                      backgroundColor: product.color || '#4CAF50',
-                      padding: '0.75rem 1rem',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    DASHBOARD VIEW
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '1rem',
-                      padding: '1rem',
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <img
-                      src={getProductImage(product.imageType, product.color, product.accentColor)}
-                      alt="Dashboard Feature"
-                      style={{
-                        width: '300px',
-                        maxWidth: '40%',
-                        height: 'auto',
-                        borderRadius: '4px',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <ul style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.9rem', color: '#333', lineHeight: 1.6 }}>
-                        <li>Automatic dashboard overview & charts</li>
-                        <li>Track all metrics in one place</li>
-                        <li>Compatible with mobile</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      backgroundColor: '#E8F5E9',
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.75rem',
-                      color: '#2E7D32',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="3" y="3" width="18" height="18" rx="2" fill="#34A853"/>
-                      <line x1="9" y1="3" x2="9" y2="21" stroke="#FFFFFF" strokeWidth="1"/>
-                      <line x1="3" y1="9" x2="21" y2="9" stroke="#FFFFFF" strokeWidth="1"/>
-                    </svg>
-                    <span>Google Sheets Document | Easy to use | Mobile Compatibility</span>
-                  </div>
+                  
+                  {/* Navigation Arrows */}
+                  {productImages.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePreviousImage}
+                        className="product-image-nav-button product-image-nav-prev"
+                        style={{
+                          position: 'absolute',
+                          left: '0.75rem',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                          border: '1px solid #E0E0E0',
+                          borderRadius: '50%',
+                          width: '40px',
+                          height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          zIndex: 10,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#F5F5F5';
+                          e.currentTarget.style.borderColor = '#CCCCCC';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                          e.currentTarget.style.borderColor = '#E0E0E0';
+                        }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
+                          <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNextImage}
+                        className="product-image-nav-button product-image-nav-next"
+                        style={{
+                          position: 'absolute',
+                          right: '0.75rem',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                          border: '1px solid #E0E0E0',
+                          borderRadius: '50%',
+                          width: '40px',
+                          height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          zIndex: 10,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#F5F5F5';
+                          e.currentTarget.style.borderColor = '#CCCCCC';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                          e.currentTarget.style.borderColor = '#E0E0E0';
+                        }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
                 </div>
 
-                {/* Feature Block 2 */}
-                <div
-                  style={{
-                    border: '1px solid #E0E0E0',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
+                {/* Thumbnail Gallery - Desktop */}
+                {productImages.length > 1 && (
                   <div
+                    className="product-image-thumbnails"
                     style={{
-                      backgroundColor: product.color || '#4CAF50',
-                      padding: '0.75rem 1rem',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
+                      gap: '0.75rem',
                     }}
                   >
-                    TRACKING VIEW
+                    {productImages.map((image, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleImageChange(index)}
+                        style={{
+                          backgroundColor: '#F5F5F5',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: `2px solid ${currentImageIndex === index ? '#000' : '#E0E0E0'}`,
+                          padding: 0,
+                          cursor: 'pointer',
+                          transition: 'border-color 0.2s',
+                          aspectRatio: '1',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentImageIndex !== index) {
+                            e.currentTarget.style.borderColor = '#999';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (currentImageIndex !== index) {
+                            e.currentTarget.style.borderColor = '#E0E0E0';
+                          }
+                        }}
+                      >
+                        <img
+                          src={image.src}
+                          alt={image.alt}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      </button>
+                    ))}
                   </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '1rem',
-                      padding: '1rem',
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <img
-                      src={getProductImage(product.imageType, product.color, product.accentColor)}
-                      alt="Tracking Feature"
-                      style={{
-                        width: '300px',
-                        maxWidth: '40%',
-                        height: 'auto',
-                        borderRadius: '4px',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <ul style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.9rem', color: '#333', lineHeight: 1.6 }}>
-                        <li>Keep track of all your data</li>
-                        <li>Organize information efficiently</li>
-                        <li>Real-time updates</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      backgroundColor: '#E8F5E9',
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.75rem',
-                      color: '#2E7D32',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="3" y="3" width="18" height="18" rx="2" fill="#34A853"/>
-                      <line x1="9" y1="3" x2="9" y2="21" stroke="#FFFFFF" strokeWidth="1"/>
-                      <line x1="3" y1="9" x2="21" y2="9" stroke="#FFFFFF" strokeWidth="1"/>
-                    </svg>
-                    <span>Google Sheets Document | Easy to use | Mobile Compatibility</span>
-                  </div>
-                </div>
+                )}
 
-                {/* Feature Block 3 */}
-                <div
-                  style={{
-                    border: '1px solid #E0E0E0',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    backgroundColor: '#FFFFFF',
-                  }}
-                >
-                  <div
-                    style={{
-                      backgroundColor: product.color || '#4CAF50',
-                      padding: '0.75rem 1rem',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    SETTINGS VIEW
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '1rem',
-                      padding: '1rem',
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <img
-                      src={getProductImage(product.imageType, product.color, product.accentColor)}
-                      alt="Settings Feature"
-                      style={{
-                        width: '300px',
-                        maxWidth: '40%',
-                        height: 'auto',
-                        borderRadius: '4px',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <ul style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.9rem', color: '#333', lineHeight: 1.6 }}>
-                        <li>Freely customize all categories</li>
-                        <li>Easy setup and configuration</li>
-                        <li>Flexible options</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      backgroundColor: '#E8F5E9',
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.75rem',
-                      color: '#2E7D32',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="3" y="3" width="18" height="18" rx="2" fill="#34A853"/>
-                      <line x1="9" y1="3" x2="9" y2="21" stroke="#FFFFFF" strokeWidth="1"/>
-                      <line x1="3" y1="9" x2="21" y2="9" stroke="#FFFFFF" strokeWidth="1"/>
-                    </svg>
-                    <span>Google Sheets Document | Easy to use | Mobile Compatibility</span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -744,13 +739,13 @@ const ProductDetail = () => {
 
               {/* Add to cart button */}
               <motion.button
-                whileHover={{ y: -2 }}
+                whileHover={{ y: -2, backgroundColor: '#222222' }}
                 whileTap={{ y: 0 }}
                 type="button"
                 style={{
                   width: '100%',
                   padding: '0.9rem 1.5rem',
-                  backgroundColor: '#000',
+                  backgroundColor: '#000000',
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '4px',
@@ -1051,74 +1046,1344 @@ const ProductDetail = () => {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
 
-          {/* Features + details layout */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1.2fr)',
-              gap: '2.5rem',
-              marginBottom: '3.5rem',
-            }}
-          >
-            {/* Left: feature sections */}
-            <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '1rem' }}>What you’ll get</h2>
-              <ul style={{ paddingLeft: '1.1rem', marginTop: 0, marginBottom: '1.5rem', color: '#333', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                <li>Pre-built Google Sheets template with clean dashboards and summaries.</li>
-                <li>Automated calculations so you don’t have to build formulas from scratch.</li>
-                <li>Optimized for both desktop and mobile viewing.</li>
-                <li>Editable categories so you can adapt it to your own workflow.</li>
-              </ul>
-
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.75rem' }}>Perfect for</h3>
-              <ul style={{ paddingLeft: '1.1rem', marginTop: 0, marginBottom: '1.5rem', color: '#333', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                <li>Freelancers and small business owners who need a simple system.</li>
-                <li>Creators selling digital products and tracking orders.</li>
-                <li>Anyone who wants a ready-to-use spreadsheet instead of building their own.</li>
-              </ul>
-
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.75rem' }}>What you need</h3>
-              <ul style={{ paddingLeft: '1.1rem', marginTop: 0, marginBottom: 0, color: '#333', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                <li>A free Google account to access Google Sheets.</li>
-                <li>Basic familiarity with spreadsheets (no advanced formulas required).</li>
-              </ul>
-            </div>
-
-            {/* Right: customer reviews summary */}
-            <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '1rem' }}>Customer Reviews</h2>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                }}
-              >
-                {reviews.map((review) => (
-                  <div key={review.id} style={{ borderBottom: '1px solid #F0F0F0', paddingBottom: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ color: '#FFC107', fontSize: '1rem' }}>★★★★★</span>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#333' }}>{review.name}</span>
-                      </div>
-                      <span style={{ fontSize: '0.8rem', color: '#999' }}>{review.date}</span>
-                    </div>
-                    <div style={{ fontSize: '0.92rem', fontWeight: 600, marginBottom: '0.25rem', color: '#111' }}>{review.title}</div>
-                    <div style={{ fontSize: '0.9rem', color: '#444', lineHeight: 1.6 }}>{review.text}</div>
+              {/* Share Button and Review Count - Outside Description Dropdown */}
+              <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Share Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: product.title,
+                        text: `Check out ${product.title} from AJ Creative Studio`,
+                        url: window.location.href,
+                      }).catch(() => {
+                        // Fallback: copy to clipboard
+                        navigator.clipboard.writeText(window.location.href);
+                        alert('Link copied to clipboard!');
+                      });
+                    } else {
+                      // Fallback: copy to clipboard
+                      navigator.clipboard.writeText(window.location.href);
+                      alert('Link copied to clipboard!');
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#000',
+                    fontSize: '0.95rem',
+                    fontWeight: 500,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#000"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  </svg>
+                  <span>Share</span>
+                </button>
+                
+                {/* Rating and Review Count */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.15rem' }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <svg
+                        key={star}
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="#FFD700"
+                        stroke="#FFD700"
+                        strokeWidth="1"
+                      >
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    ))}
                   </div>
-                ))}
+                  <span style={{ fontSize: '0.95rem', color: '#000', fontWeight: 500 }}>
+                    {totalReviews} review{totalReviews !== 1 ? 's' : ''}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Customer Reviews Section - Same Width as Main Content */}
+        <div ref={customerReviewsSectionRef} style={{ maxWidth: '1100px', margin: '3.5rem auto', padding: '0 1rem' }} className="customer-reviews-section">
+          {/* Customer Reviews Title - Centered */}
+          <div style={{ textAlign: 'center', marginBottom: '2rem', position: 'relative' }} className="customer-reviews-title">
+            <h2 style={{ 
+              fontSize: '1.6rem', 
+              fontWeight: 600, 
+              margin: 0,
+              color: '#000',
+            }}>
+              Customer Reviews
+            </h2>
+          </div>
+
+          {/* Rating Summary Section - Three Column Layout */}
+          <div
+            className="rating-summary-section"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr auto',
+              gap: '2.5rem',
+              alignItems: 'flex-start',
+              marginBottom: '2rem',
+              paddingBottom: '2rem',
+              borderBottom: '1px solid #E0E0E0',
+            }}
+          >
+            {/* Overall Rating (Left) */}
+            <div className="overall-rating-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '140px' }}>
+              <div className="overall-rating-stars" style={{ display: 'flex', gap: '0.2rem', marginBottom: '0.75rem' }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg
+                    key={star}
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="#FFD700"
+                    stroke="#FFD700"
+                    strokeWidth="1"
+                  >
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                ))}
+              </div>
+              <div className="overall-rating-text" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#000', marginBottom: '0.5rem', lineHeight: 1.2 }}>
+                {averageRating.toFixed(2)} out of 5
+              </div>
+              <div className="overall-rating-count" style={{ fontSize: '0.9rem', color: '#666' }}>
+                Based on {totalReviews} review{totalReviews !== 1 ? 's' : ''}
+              </div>
+            </div>
+
+            {/* Star Rating Breakdown (Center) */}
+            <div className="star-breakdown-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'flex-start' }}>
+              {starDistribution.map(({ stars, count }) => {
+                const maxCount = Math.max(...starDistribution.map(s => s.count), 1);
+                const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                return (
+                  <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.15rem', minWidth: '100px', flexShrink: 0 }}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <svg
+                          key={star}
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill={star <= stars ? '#FFD700' : 'none'}
+                          stroke={star <= stars ? '#FFD700' : '#E0E0E0'}
+                          strokeWidth="1"
+                        >
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      ))}
+                    </div>
+                    <div style={{ position: 'relative', flex: 1, height: '10px', backgroundColor: '#E0E0E0', borderRadius: '2px', minWidth: '100px', maxWidth: '250px' }}>
+                      {count > 0 && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            height: '100%',
+                            width: `${barWidth}%`,
+                            backgroundColor: '#FFD700',
+                            borderRadius: '2px',
+                          }}
+                        />
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.9rem', color: '#666', minWidth: '30px', textAlign: 'right', fontWeight: 500 }}>
+                      {count}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Write a review Button (Right) */}
+            <div className="write-review-button-wrapper" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
+              <motion.button
+                whileHover={{ y: -2, backgroundColor: '#FFC700' }}
+                whileTap={{ y: 0 }}
+                type="button"
+                className="write-review-button"
+                onClick={() => {
+                  if (reviewSubmitted) {
+                    window.location.reload();
+                  } else if (showReviewForm) {
+                    // Reset form when canceling
+                    setReviewRating(0);
+                    setReviewTitle('');
+                    setReviewContent('');
+                    setDisplayName('');
+                    setEmailAddress('');
+                    setReviewSubmitted(false);
+                    setValidationErrors({});
+                    // Clean up preview URLs before clearing
+                    filePreviews.forEach(url => {
+                      if (url) URL.revokeObjectURL(url);
+                    });
+                    setUploadedFiles([]);
+                    setFilePreviews([]);
+                    setShowReviewForm(false);
+                  } else {
+                    // Open form and scroll will happen via useEffect
+                    setShowReviewForm(true);
+                  }
+                }}
+                style={{
+                  padding: '0.75rem 2rem',
+                  backgroundColor: '#FFD700',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {reviewSubmitted ? 'Refresh page' : showReviewForm ? 'Cancel review' : 'Write a review'}
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Write Review Form Dropdown */}
+          <AnimatePresence>
+            {showReviewForm && (
+              <motion.div
+                ref={reviewFormRef}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                style={{
+                  overflow: 'hidden',
+                  marginBottom: '2rem',
+                  border: 'none',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <div style={{ padding: '2rem' }}>
+                  {reviewSubmitted ? (
+                    /* Success Message */
+                    <div ref={successMessageRef} style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                      {/* Checkmark Icon */}
+                      <div style={{ 
+                        width: '80px', 
+                        height: '80px', 
+                        borderRadius: '50%', 
+                        backgroundColor: '#FFD700', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        margin: '0 auto 1.5rem',
+                        boxShadow: '0 2px 8px rgba(255, 215, 0, 0.3)'
+                      }}>
+                        <svg 
+                          width="48" 
+                          height="48" 
+                          viewBox="0 0 24 24" 
+                          fill="none" 
+                          stroke="#FFFFFF" 
+                          strokeWidth="3" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                          style={{ transform: 'rotate(-5deg)' }}
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                      
+                      {/* Success Title */}
+                      <h3 style={{ 
+                        fontSize: '1.75rem', 
+                        fontWeight: 700, 
+                        marginBottom: '1rem', 
+                        color: '#FFD700', 
+                        textAlign: 'center' 
+                      }}>
+                        Review Submitted!
+                      </h3>
+                      
+                      {/* Success Message */}
+                      <p style={{ 
+                        fontSize: '1rem', 
+                        color: '#FFD700', 
+                        lineHeight: 1.6, 
+                        textAlign: 'center',
+                        marginBottom: '2rem',
+                        maxWidth: '500px',
+                        marginLeft: 'auto',
+                        marginRight: 'auto'
+                      }}>
+                        Thank you! Your review will be published as soon as it is approved by the shop admin. You can remove or edit your review by logging into{' '}
+                        <a 
+                          href="https://judge.me" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ 
+                            color: '#FFD700', 
+                            textDecoration: 'underline',
+                            fontWeight: 500
+                          }}
+                        >
+                          Judge.me
+                        </a>
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Form Header */}
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.5rem', color: '#000', textAlign: 'center' }}>
+                        Write a review
+                      </h3>
+
+                  {/* Rating Section */}
+                  <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.5rem', color: '#333' }}>
+                      Rating
+                    </label>
+                    <div 
+                      style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', justifyContent: 'center' }}
+                      onMouseLeave={() => setHoveredRating(0)}
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const displayRating = hoveredRating || reviewRating;
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => {
+                              setReviewRating(star);
+                              if (validationErrors.rating) {
+                                setValidationErrors(prev => {
+                                  const newErrors = { ...prev };
+                                  delete newErrors.rating;
+                                  return newErrors;
+                                });
+                              }
+                            }}
+                            onMouseEnter={() => setHoveredRating(star)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: '4px',
+                              cursor: 'pointer',
+                              margin: '-4px',
+                            }}
+                          >
+                            <svg
+                              width="32"
+                              height="32"
+                              viewBox="0 0 24 24"
+                              fill={star <= displayRating ? '#FFD700' : 'none'}
+                              stroke="#FFD700"
+                              strokeWidth="1.5"
+                            >
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                      {(hoveredRating > 0 || reviewRating > 0) && (
+                        <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem', color: '#666' }}>
+                          {hoveredRating || reviewRating} star{(hoveredRating || reviewRating) !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {validationErrors.rating && (
+                      <div className="invalid-feedback" style={{ display: 'block', width: '100%', marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc3545', textAlign: 'center' }}>
+                        {validationErrors.rating}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Review Title */}
+                  <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.5rem', color: '#333' }}>
+                      Review Title <span style={{ color: '#808080' }}>(100)</span>
+                    </label>
+                    <input
+                      ref={reviewTitleInputRef}
+                      type="text"
+                      className={`form-control ${validationErrors.title ? 'is-invalid' : ''}`}
+                      value={reviewTitle}
+                      onChange={(e) => {
+                        setReviewTitle(e.target.value.slice(0, 100));
+                        if (validationErrors.title) {
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev };
+                            delete newErrors.title;
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      placeholder="Give your review a title"
+                      maxLength={100}
+                      style={{
+                        maxWidth: '600px',
+                        margin: '0 auto',
+                        border: validationErrors.title ? '2px solid #dc3545' : '2px solid rgba(255, 215, 0, 0.5)',
+                      }}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: '#808080', marginTop: '0.25rem', textAlign: 'center' }}>
+                      {reviewTitle.length}/100
+                    </div>
+                    {validationErrors.title && (
+                      <div className="invalid-feedback" style={{ display: 'block', width: '100%', marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc3545', textAlign: 'center' }}>
+                        {validationErrors.title}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Review Content */}
+                  <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.5rem', color: '#333' }}>
+                      Review content <span style={{ color: '#808080' }}>(5000)</span>
+                    </label>
+                    <textarea
+                      className={`form-control ${validationErrors.content ? 'is-invalid' : ''}`}
+                      value={reviewContent}
+                      onChange={(e) => {
+                        setReviewContent(e.target.value.slice(0, 5000));
+                        if (validationErrors.content) {
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev };
+                            delete newErrors.content;
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      placeholder="Start writing here..."
+                      maxLength={5000}
+                      rows={6}
+                      style={{
+                        maxWidth: '600px',
+                        margin: '0 auto',
+                        resize: 'vertical',
+                        border: validationErrors.content ? '2px solid #dc3545' : '2px solid rgba(255, 215, 0, 0.5)',
+                      }}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: '#808080', marginTop: '0.25rem', textAlign: 'center' }}>
+                      {reviewContent.length}/5000
+                    </div>
+                    {validationErrors.content && (
+                      <div className="invalid-feedback" style={{ display: 'block', width: '100%', marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc3545', textAlign: 'center' }}>
+                        {validationErrors.content}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Picture Upload */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.75rem', color: '#333', textAlign: 'center' }}>
+                      Picture/Video (optional)
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        const validFiles = [];
+                        const validPreviews = [];
+                        
+                        files.forEach(file => {
+                          // Check if file is an image or video
+                          if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                            toast.error(`${file.name} is not an image or video file. Only images and videos are allowed.`);
+                            return;
+                          }
+                          
+                          // Check file size (convert bytes to MB)
+                          const fileSizeMB = file.size / (1024 * 1024);
+                          if (fileSizeMB > MAX_FILE_SIZE_MB) {
+                            toast.error(`${file.name} exceeds the maximum file size of ${MAX_FILE_SIZE_MB}MB. File size: ${fileSizeMB.toFixed(2)}MB`);
+                            return;
+                          }
+                          
+                          // File is valid
+                          validFiles.push(file);
+                          // Only create preview URL for images (videos will show an icon)
+                          if (file.type.startsWith('image/')) {
+                            validPreviews.push(URL.createObjectURL(file));
+                          } else {
+                            validPreviews.push(null); // Video placeholder
+                          }
+                        });
+                        
+                        if (validFiles.length > 0) {
+                          setUploadedFiles(prev => [...prev, ...validFiles]);
+                          setFilePreviews(prev => [...prev, ...validPreviews]);
+                          const imageCount = validFiles.filter(f => f.type.startsWith('image/')).length;
+                          const videoCount = validFiles.filter(f => f.type.startsWith('video/')).length;
+                          let message = '';
+                          if (imageCount > 0 && videoCount > 0) {
+                            message = `${imageCount} image${imageCount !== 1 ? 's' : ''} and ${videoCount} video${videoCount !== 1 ? 's' : ''} uploaded successfully`;
+                          } else if (imageCount > 0) {
+                            message = `${imageCount} image${imageCount !== 1 ? 's' : ''} uploaded successfully`;
+                          } else {
+                            message = `${videoCount} video${videoCount !== 1 ? 's' : ''} uploaded successfully`;
+                          }
+                          if (validFiles.length === files.length) {
+                            toast.success(message);
+                          }
+                        }
+                        
+                        // Reset input to allow selecting the same file again
+                        e.target.value = '';
+                      }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center' }}>
+                      {/* Upload Box */}
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          width: '150px',
+                          height: '120px',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          backgroundColor: '#FFFFFF',
+                          transition: 'all 0.2s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = '#FFD700';
+                          e.currentTarget.style.backgroundColor = '#FFF9E6';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = '#E0E0E0';
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        }}
+                      >
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                      </div>
+                      
+                      {/* Uploaded Images and Videos */}
+                      {uploadedFiles.map((file, index) => (
+                        <div 
+                          key={index} 
+                          style={{ 
+                            position: 'relative', 
+                            width: '150px',
+                            height: '120px',
+                            flexShrink: 0,
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          {file.type.startsWith('image/') && filePreviews[index] ? (
+                            <>
+                              <img
+                                src={filePreviews[index]}
+                                alt={file.name}
+                                style={{
+                                  width: '150px',
+                                  height: '120px',
+                                  objectFit: 'cover',
+                                  borderRadius: '4px',
+                                  border: '2px solid #E0E0E0',
+                                  display: 'block',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.borderColor = '#FFD700';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.borderColor = '#E0E0E0';
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newFiles = uploadedFiles.filter((_, i) => i !== index);
+                                  const newPreviews = filePreviews.filter((_, i) => i !== index);
+                                  setUploadedFiles(newFiles);
+                                  setFilePreviews(newPreviews);
+                                  // Revoke the URL to free memory
+                                  if (filePreviews[index]) {
+                                    URL.revokeObjectURL(filePreviews[index]);
+                                  }
+                                  toast.info(`${file.name} removed`);
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '4px',
+                                  right: '4px',
+                                  background: 'rgba(0, 0, 0, 0.6)',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '24px',
+                                  height: '24px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold',
+                                  lineHeight: '1',
+                                  padding: '0',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 0, 0, 0.8)';
+                                  e.currentTarget.style.transform = 'scale(1.1)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.6)';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                              >
+                                ×
+                              </button>
+                            </>
+                          ) : file.type.startsWith('video/') ? (
+                            <>
+                              <div
+                                style={{
+                                  width: '150px',
+                                  height: '120px',
+                                  borderRadius: '4px',
+                                  border: '2px solid #E0E0E0',
+                                  backgroundColor: '#000',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.borderColor = '#FFD700';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.borderColor = '#E0E0E0';
+                                }}
+                              >
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newFiles = uploadedFiles.filter((_, i) => i !== index);
+                                  const newPreviews = filePreviews.filter((_, i) => i !== index);
+                                  setUploadedFiles(newFiles);
+                                  setFilePreviews(newPreviews);
+                                  toast.info(`${file.name} removed`);
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '4px',
+                                  right: '4px',
+                                  background: 'rgba(0, 0, 0, 0.6)',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '24px',
+                                  height: '24px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold',
+                                  lineHeight: '1',
+                                  padding: '0',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 0, 0, 0.8)';
+                                  e.currentTarget.style.transform = 'scale(1.1)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.6)';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                              >
+                                ×
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Display Name */}
+                  <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.5rem', color: '#333' }}>
+                      Display name (displayed publicly like{' '}
+                      <span ref={displayNameExampleDropdownRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setDisplayNameExampleDropdownOpen(!displayNameExampleDropdownOpen)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: '#FFD700',
+                            fontSize: '0.95rem',
+                            fontWeight: 500,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          {displayNameExample}
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: displayNameExampleDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                            <path d="M3 4.5L6 7.5L9 4.5" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        
+                        {displayNameExampleDropdownOpen && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              marginTop: '0.25rem',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #E0E0E0',
+                              borderRadius: '6px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                              zIndex: 1000,
+                              overflow: 'hidden',
+                              minWidth: '120px',
+                            }}
+                          >
+                            {displayNameOptions.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => {
+                                  setDisplayNameExample(option);
+                                  setDisplayNameExampleDropdownOpen(false);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.75rem 1rem',
+                                  background: displayNameExample === option ? '#0066CC' : '#FFFFFF',
+                                  color: displayNameExample === option ? '#FFFFFF' : '#FFD700',
+                                  border: 'none',
+                                  borderBottom: '1px solid #F0F0F0',
+                                  cursor: 'pointer',
+                                  fontSize: '0.95rem',
+                                  fontWeight: 500,
+                                  textAlign: 'left',
+                                  transition: 'background-color 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (displayNameExample !== option) {
+                                    e.currentTarget.style.backgroundColor = '#FFF9E6';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (displayNameExample !== option) {
+                                    e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                  }
+                                }}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </span>
+                      )
+                    </label>
+                    <input
+                      type="text"
+                      className={`form-control ${validationErrors.displayName ? 'is-invalid' : ''}`}
+                      value={displayName}
+                      onChange={(e) => {
+                        setDisplayName(e.target.value);
+                        if (validationErrors.displayName) {
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev };
+                            delete newErrors.displayName;
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      placeholder="Display name"
+                      style={{
+                        maxWidth: '600px',
+                        margin: '0 auto',
+                        border: validationErrors.displayName ? '2px solid #dc3545' : '2px solid rgba(255, 215, 0, 0.5)',
+                      }}
+                    />
+                    {validationErrors.displayName && (
+                      <div className="invalid-feedback" style={{ display: 'block', width: '100%', marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc3545', textAlign: 'center' }}>
+                        {validationErrors.displayName}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Email Address */}
+                  <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                    <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.5rem', color: '#333' }}>
+                      Email address
+                    </label>
+                    <input
+                      type="email"
+                      className={`form-control ${validationErrors.email ? 'is-invalid' : ''}`}
+                      value={emailAddress}
+                      onChange={(e) => {
+                        setEmailAddress(e.target.value);
+                        if (validationErrors.email) {
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev };
+                            delete newErrors.email;
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      placeholder="Your email address"
+                      style={{
+                        maxWidth: '600px',
+                        margin: '0 auto',
+                        border: validationErrors.email ? '2px solid #dc3545' : '2px solid rgba(255, 215, 0, 0.5)',
+                      }}
+                    />
+                    {validationErrors.email && (
+                      <div className="invalid-feedback" style={{ display: 'block', width: '100%', marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc3545', textAlign: 'center' }}>
+                        {validationErrors.email}
+                      </div>
+                    )}
+                  </div>
+
+                  {!reviewSubmitted && (
+                    <>
+                      {/* Privacy Notice */}
+                      <div style={{ 
+                        marginBottom: '2rem', 
+                        fontSize: '0.875rem', 
+                        color: '#4a4a4a', 
+                        lineHeight: 1.6, 
+                        textAlign: 'center',
+                        maxWidth: '600px',
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        padding: '0 1rem'
+                      }}>
+                        How we use your data: We'll only contact you about the review you left, and only if necessary. By submitting your review, you agree to Judge.me's{' '}
+                        <a href="#" style={{ color: '#007bff', textDecoration: 'underline' }}>terms</a>,{' '}
+                        <a href="#" style={{ color: '#007bff', textDecoration: 'underline' }}>privacy</a> and{' '}
+                        <a href="#" style={{ color: '#007bff', textDecoration: 'underline' }}>content policies</a>.
+                      </div>
+                    </>
+                  )}
+
+                  {/* Action Buttons - Always Visible */}
+                  {reviewSubmitted ? (
+                    <div 
+                      ref={refreshButtonRef}
+                      style={{ 
+                        display: 'flex', 
+                        gap: '1.25rem', 
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        marginTop: '2rem'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.location.reload();
+                        }}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: '#FFFFFF',
+                          color: '#FFD700',
+                          border: '2px solid #FFD700',
+                          borderRadius: '6px',
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          minWidth: '140px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFF9E6';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        }}
+                      >
+                        Refresh page
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '1.25rem', 
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      flexWrap: 'wrap'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowReviewForm(false);
+                          setReviewRating(0);
+                          setReviewTitle('');
+                          setReviewContent('');
+                          setDisplayName('');
+                          setEmailAddress('');
+                          setReviewSubmitted(false);
+                          setValidationErrors({});
+                          // Clean up preview URLs before clearing
+                          filePreviews.forEach(url => {
+                            if (url) URL.revokeObjectURL(url);
+                          });
+                          setUploadedFiles([]);
+                          setFilePreviews([]);
+                        }}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: '#FFFFFF',
+                          color: '#FFD700',
+                          border: '2px solid #FFD700',
+                          borderRadius: '6px',
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          minWidth: '140px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFF9E6';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        }}
+                      >
+                        Cancel review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Validate form fields
+                          const errors = {};
+                          
+                          if (reviewRating === 0) {
+                            errors.rating = 'Rating is required';
+                          }
+                          if (!reviewTitle.trim()) {
+                            errors.title = 'Review title is required';
+                          }
+                          if (!reviewContent.trim()) {
+                            errors.content = 'Review content is required';
+                          }
+                          if (!displayName.trim()) {
+                            errors.displayName = 'Display name is required';
+                          }
+                          if (!emailAddress.trim()) {
+                            errors.email = 'Email address is required';
+                          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
+                            errors.email = 'Please enter a valid email address';
+                          }
+                          
+                          setValidationErrors(errors);
+                          
+                          // If no errors, submit the form
+                          if (Object.keys(errors).length === 0) {
+                            console.log('Review submitted:', { reviewRating, reviewTitle, reviewContent, displayName, emailAddress, uploadedFiles });
+                            setReviewSubmitted(true);
+                            // Clean up preview URLs before clearing
+                            filePreviews.forEach(url => {
+                              if (url) URL.revokeObjectURL(url);
+                            });
+                            // Scroll to Customer Reviews section so the title and refresh button are visible
+                            setTimeout(() => {
+                              if (customerReviewsSectionRef.current) {
+                                const element = customerReviewsSectionRef.current;
+                                const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                                const offsetPosition = elementPosition - 150; // Larger offset to show the "Customer Reviews" title
+                                
+                                window.scrollTo({
+                                  top: Math.max(0, offsetPosition),
+                                  behavior: 'smooth'
+                                });
+                              }
+                            }, 400);
+                          }
+                        }}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          backgroundColor: '#FFD700',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          minWidth: '140px',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFC700';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FFD700';
+                        }}
+                      >
+                        Submit Review
+                      </button>
+                    </div>
+                  )}
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Sort Option Dropdown */}
+          <div ref={sortDropdownRef} className="sort-option-dropdown" style={{ marginBottom: '1.5rem', position: 'relative', display: 'inline-block' }}>
+            <button
+              type="button"
+              onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: '#FFD700',
+                fontSize: '0.95rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              {selectedSort}
+              <svg 
+                width="12" 
+                height="12" 
+                viewBox="0 0 12 12" 
+                fill="none"
+                style={{ transform: sortDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+              >
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            
+            {sortDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '0.5rem',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E0E0E0',
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  zIndex: 1000,
+                  minWidth: '180px',
+                  overflow: 'hidden',
+                }}
+              >
+                {sortOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSort(option);
+                      setSortDropdownOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      background: selectedSort === option ? '#0066CC' : '#FFFFFF',
+                      color: selectedSort === option ? '#FFFFFF' : '#FFD700',
+                      border: 'none',
+                      borderBottom: '1px solid #F0F0F0',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      fontWeight: 500,
+                      textAlign: 'left',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedSort !== option) {
+                        e.target.style.backgroundColor = '#FFF9E6';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedSort !== option) {
+                        e.target.style.backgroundColor = '#FFFFFF';
+                      }
+                    }}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Individual Reviews */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.5rem',
+            }}
+          >
+            {paginatedReviews.map((review, index) => (
+              <div
+                key={review.id}
+                style={{
+                  borderBottom: index < paginatedReviews.length - 1 ? '1px solid #E0E0E0' : 'none',
+                  paddingBottom: index < paginatedReviews.length - 1 ? '1.5rem' : 0,
+                }}
+              >
+                {/* Star Rating */}
+                <div style={{ display: 'flex', gap: '0.2rem', marginBottom: '0.75rem' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <svg
+                      key={star}
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="#FFD700"
+                      stroke="#FFD700"
+                      strokeWidth="1"
+                    >
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  ))}
+                </div>
+
+                {/* Reviewer Info and Date */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {/* User Icon */}
+                    <div style={{ position: 'relative', width: '32px', height: '32px' }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          backgroundColor: '#FFD700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#FFFFFF"
+                          strokeWidth="1.5"
+                        >
+                          <circle cx="12" cy="8" r="4" />
+                          <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+                        </svg>
+                      </div>
+                      {review.verified && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '-2px',
+                            right: '-2px',
+                            width: '14px',
+                            height: '14px',
+                            backgroundColor: '#FFD700',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '2px solid #FFFFFF',
+                          }}
+                        >
+                          <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6L5 9L10 3" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 500, color: '#000' }}>{review.name}</span>
+                    {review.verified && (
+                      <span
+                        style={{
+                          backgroundColor: '#FFD700',
+                          color: '#FFFFFF',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '3px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.9rem', color: '#999' }}>{review.date}</span>
+                </div>
+
+                {/* Review Title */}
+                {review.title && (
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.5rem', color: '#000' }}>
+                    {review.title}
+                  </div>
+                )}
+
+                {/* Review Text */}
+                <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6 }}>
+                  {review.text}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div
+              className="pagination-wrapper"
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginTop: '2rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
+                className="pagination-button pagination-nav-button"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  backgroundColor: currentPage === 1 ? '#F5F5F5' : '#FFFFFF',
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  color: currentPage === 1 ? '#999' : '#000',
+                  fontSize: '1rem',
+                }}
+              >
+                &lt;
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={`pagination-button pagination-page-button${
+                    currentPage === page ? ' active' : ''
+                  }`}
+                  onClick={() => handlePageChange(page)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    border: '1px solid #CCCCCC',
+                    borderRadius: '4px',
+                    backgroundColor: currentPage === page ? '#000' : '#FFFFFF',
+                    color: currentPage === page ? '#FFFFFF' : '#000',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    textDecoration: currentPage === page ? 'underline' : 'none',
+                    fontWeight: currentPage === page ? 600 : 400,
+                  }}
+                >
+                  {page}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                className="pagination-button pagination-nav-button"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: '1px solid #CCCCCC',
+                  borderRadius: '4px',
+                  backgroundColor: currentPage === totalPages ? '#F5F5F5' : '#FFFFFF',
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  color: currentPage === totalPages ? '#999' : '#000',
+                  fontSize: '1rem',
+                }}
+              >
+                &gt;
+              </button>
+            </div>
+          )}
+        </div>
       </section>
 
+
       <EmailSubscribeFooter />
+      
+      {/* Toast Container */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
     </>
   );
 };
+
 
 export default ProductDetail;

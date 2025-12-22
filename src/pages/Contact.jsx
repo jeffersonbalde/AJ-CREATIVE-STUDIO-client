@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
 
 const Contact = () => {
@@ -75,25 +76,24 @@ const Contact = () => {
             </div>
 
             {/* Send button (match MostPopular primary button style) */}
-            <button
+            <motion.button
+              whileHover={{ y: -2, backgroundColor: '#222222' }}
+              whileTap={{ y: 0 }}
               type="submit"
               className="most-popular-view-all"
               style={{
-                padding: '0.75rem 2.5rem',
-                backgroundColor: '#FFD700',
-                color: '#000',
+                padding: '0.9rem 1.5rem',
+                backgroundColor: '#000000',
+                color: '#FFFFFF',
                 border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
+                borderRadius: '4px',
+                fontSize: '0.98rem',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.4s ease',
-                boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)',
-                display: 'inline-block',
               }}
             >
               Send
-            </button>
+            </motion.button>
           </form>
         </div>
       </section>
