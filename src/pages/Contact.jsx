@@ -19,7 +19,11 @@ const Contact = () => {
       >
         <div style={{ maxWidth: '900px', margin: '0 auto' }}>
           {/* Page title */}
-          <h1
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
             style={{
               fontSize: 'clamp(2rem, 5vw, 3rem)',
               fontWeight: 700,
@@ -30,10 +34,17 @@ const Contact = () => {
             }}
           >
             Contact
-          </h1>
+          </motion.h1>
 
           {/* Contact form */}
-          <form onSubmit={handleSubmit} style={{ maxWidth: '720px', margin: '0 auto' }}>
+          <motion.form
+            onSubmit={handleSubmit}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+            style={{ maxWidth: '720px', margin: '0 auto' }}
+          >
             {/* First row: Name + Email (Bootstrap grid) */}
             <div className="row g-3 mb-3">
               <div className="col-md-6">
@@ -94,7 +105,7 @@ const Contact = () => {
             >
               Send
             </motion.button>
-          </form>
+          </motion.form>
         </div>
       </section>
 

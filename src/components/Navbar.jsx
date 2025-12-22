@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import logoImage from '../assets/images/logo.jpg';
 import './Navbar.css';
+import { useCart } from '../contexts/CartContext';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -12,6 +13,7 @@ const Navbar = () => {
   const [navHeight, setNavHeight] = useState(0);
   const location = useLocation();
   const navRef = useRef(null);
+  const { setCartOpen, getCartItemCount } = useCart();
 
   useEffect(() => {
     // Close the mobile menu on route change
@@ -239,6 +241,7 @@ const Navbar = () => {
               className="btn btn-link p-0 position-relative"
               style={{ color: '#000', textDecoration: 'none' }}
               aria-label="Shopping Cart"
+              onClick={() => setCartOpen(true)}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -256,51 +259,85 @@ const Navbar = () => {
                 <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
               {/* Cart badge */}
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '-6px',
-                  right: '-6px',
-                  backgroundColor: '#000',
-                  color: '#FFF',
-                  borderRadius: '50%',
-                  width: '18px',
-                  height: '18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                }}
-              >
-                5
-              </span>
+              {getCartItemCount() > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-6px',
+                    backgroundColor: '#000',
+                    color: '#FFF',
+                    borderRadius: '50%',
+                    width: '18px',
+                    height: '18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {getCartItemCount()}
+                </span>
+              )}
             </button>
 
             {/* Hamburger visible only on mobile */}
             <button
               type="button"
               className="btn btn-link d-lg-none p-0"
-              style={{ color: '#000', textDecoration: 'none' }}
+              style={{ color: '#000', textDecoration: 'none', display: 'flex', alignItems: 'center' }}
               aria-label="Toggle navigation"
               aria-expanded={mobileOpen}
               onClick={() => setMobileOpen((v) => !v)}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+              <div
+                style={{
+                  position: 'relative',
+                  width: '22px',
+                  height: '18px',
+                }}
               >
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    backgroundColor: '#000',
+                    borderRadius: '2px',
+                    transition: 'transform 0.25s ease, top 0.25s ease',
+                    top: mobileOpen ? '8px' : '1px',
+                    transform: mobileOpen ? 'rotate(45deg)' : 'rotate(0deg)',
+                  }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    backgroundColor: '#000',
+                    borderRadius: '2px',
+                    transition: 'opacity 0.2s ease',
+                    top: '8.5px',
+                    opacity: mobileOpen ? 0 : 1,
+                  }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    backgroundColor: '#000',
+                    borderRadius: '2px',
+                    transition: 'transform 0.25s ease, top 0.25s ease',
+                    top: mobileOpen ? '8px' : '16px',
+                    transform: mobileOpen ? 'rotate(-45deg)' : 'rotate(0deg)',
+                  }}
+                />
+              </div>
             </button>
           </div>
         </div>

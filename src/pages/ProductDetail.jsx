@@ -10,6 +10,7 @@ import grabPayLogo from '../assets/images/grabpay-logo.png';
 import shopeePayLogo from '../assets/images/shopeepay-logo.jpg';
 import sevenElevenLogo from '../assets/images/7eleven-logo.png';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+import { useCart } from '../contexts/CartContext';
 
 // Import all product sample images
 import productImage1 from '../assets/images/digital_product_sample/1.webp';
@@ -208,6 +209,7 @@ const ProductDetail = () => {
   const successMessageRef = useRef(null);
   const refreshButtonRef = useRef(null);
   const customerReviewsSectionRef = useRef(null);
+  const { addToCart, setCartOpen } = useCart();
   
   const reviewsPerPage = 5;
   
@@ -445,8 +447,8 @@ const ProductDetail = () => {
               {/* Main Product Images - Responsive Gallery */}
               <div style={{ marginBottom: '2rem' }}>
                 {/* Main Image Display */}
-                <div
-                  style={{
+              <div
+                style={{
                     position: 'relative',
                     backgroundColor: '#F5F5F5',
                     borderRadius: '8px',
@@ -472,7 +474,7 @@ const ProductDetail = () => {
                         type="button"
                         onClick={handlePreviousImage}
                         className="product-image-nav-button product-image-nav-prev"
-                        style={{
+                style={{
                           position: 'absolute',
                           left: '0.75rem',
                           top: '50%',
@@ -482,9 +484,9 @@ const ProductDetail = () => {
                           borderRadius: '50%',
                           width: '40px',
                           height: '40px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                           cursor: 'pointer',
                           zIndex: 10,
                           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
@@ -501,30 +503,30 @@ const ProductDetail = () => {
                       >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
                           <path d="M15 18l-6-6 6-6" />
-                        </svg>
+                  </svg>
                       </button>
                       <button
                         type="button"
                         onClick={handleNextImage}
                         className="product-image-nav-button product-image-nav-next"
-                        style={{
+                  style={{
                           position: 'absolute',
                           right: '0.75rem',
                           top: '50%',
                           transform: 'translateY(-50%)',
                           backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                          border: '1px solid #E0E0E0',
+                    border: '1px solid #E0E0E0',
                           borderRadius: '50%',
                           width: '40px',
                           height: '40px',
-                          display: 'flex',
+                      display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
                           zIndex: 10,
                           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                           transition: 'all 0.2s ease',
-                        }}
+                      }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = '#F5F5F5';
                           e.currentTarget.style.borderColor = '#CCCCCC';
@@ -532,11 +534,11 @@ const ProductDetail = () => {
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
                           e.currentTarget.style.borderColor = '#E0E0E0';
-                        }}
-                      >
+                    }}
+                  >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
                           <path d="M9 18l6-6-6-6" />
-                        </svg>
+                    </svg>
                       </button>
                     </>
                   )}
@@ -544,27 +546,27 @@ const ProductDetail = () => {
 
                 {/* Thumbnail Gallery - Desktop */}
                 {productImages.length > 1 && (
-                  <div
+                <div
                     className="product-image-thumbnails"
-                    style={{
+                  style={{
                       gap: '0.75rem',
-                    }}
-                  >
+                  }}
+                >
                     {productImages.map((image, index) => (
                       <button
                         key={index}
                         type="button"
                         onClick={() => handleImageChange(index)}
-                        style={{
+                    style={{
                           backgroundColor: '#F5F5F5',
-                          borderRadius: '8px',
-                          overflow: 'hidden',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
                           border: `2px solid ${currentImageIndex === index ? '#000' : '#E0E0E0'}`,
                           padding: 0,
                           cursor: 'pointer',
                           transition: 'border-color 0.2s',
                           aspectRatio: '1',
-                        }}
+                    }}
                         onMouseEnter={(e) => {
                           if (currentImageIndex !== index) {
                             e.currentTarget.style.borderColor = '#999';
@@ -574,21 +576,21 @@ const ProductDetail = () => {
                           if (currentImageIndex !== index) {
                             e.currentTarget.style.borderColor = '#E0E0E0';
                           }
-                        }}
-                      >
-                        <img
+                    }}
+                  >
+                    <img
                           src={image.src}
                           alt={image.alt}
-                          style={{
+                      style={{
                             width: '100%',
                             height: '100%',
                             objectFit: 'cover',
                             display: 'block',
-                          }}
-                        />
+                      }}
+                    />
                       </button>
                     ))}
-                  </div>
+                    </div>
                 )}
 
               </div>
@@ -597,13 +599,23 @@ const ProductDetail = () => {
             {/* Right Column: Product Information */}
             <div>
               {/* Rating and title */}
-              <div style={{ marginBottom: '0.75rem' }}>
+              <motion.div
+                style={{ marginBottom: '0.75rem' }}
+                initial={{ opacity: 0, y: 25 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
                   <span style={{ color: '#FFC107', fontSize: '1.1rem' }}>★★★★★</span>
                   <span style={{ fontSize: '0.9rem', color: '#333' }}>{averageRating.toFixed(2)} out of 5</span>
                   <span style={{ fontSize: '0.9rem', color: '#999' }}>Based on {totalReviews} review{totalReviews !== 1 ? 's' : ''}</span>
                 </div>
-                <h1
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: false, margin: '-100px' }}
+                  transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
                   style={{
                     fontSize: 'clamp(1.75rem, 3.3vw, 2.4rem)',
                     fontWeight: 600,
@@ -612,11 +624,17 @@ const ProductDetail = () => {
                   }}
                 >
                   {product.title}
-                </h1>
-              </div>
+                </motion.h1>
+              </motion.div>
 
               {/* Pricing row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <motion.div
+                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+              >
                 {product.oldPrice && (
                   <span
                     style={{
@@ -651,13 +669,19 @@ const ProductDetail = () => {
                     Sale
                   </span>
                 )}
-              </div>
+              </motion.div>
 
               {/* Short Description Section */}
               {(() => {
                 const shortDesc = generateShortDescription(product);
                 return (
-                  <div style={{ marginBottom: '1.5rem' }}>
+                  <motion.div
+                    style={{ marginBottom: '1.5rem' }}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: false, margin: '-100px' }}
+                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                  >
                     {/* Intro Paragraph */}
                     <p
                       style={{
@@ -697,18 +721,22 @@ const ProductDetail = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })()}
 
               {/* Payment methods row */}
-              <div
+              <motion.div
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
                   gap: '0.5rem',
                   marginBottom: '1.5rem',
                 }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               >
                 {paymentLogos.map((method) => (
                   <div
@@ -735,13 +763,28 @@ const ProductDetail = () => {
                     />
                   </div>
                 ))}
-              </div>
+              </motion.div>
 
               {/* Add to cart button */}
               <motion.button
                 whileHover={{ y: -2, backgroundColor: '#222222' }}
                 whileTap={{ y: 0 }}
                 type="button"
+                onClick={() => {
+                  // Add product to cart
+                  const productToAdd = {
+                    id: product.id,
+                    title: product.title,
+                    price: product.price,
+                    image: getProductImage(product),
+                  };
+                  
+                  addToCart(productToAdd);
+                  
+                  // Open cart panel
+                  setCartOpen(true);
+                  toast.success(`${product.title} added to cart`);
+                }}
                 style={{
                   width: '100%',
                   padding: '0.9rem 1.5rem',
@@ -754,18 +797,26 @@ const ProductDetail = () => {
                   cursor: 'pointer',
                   marginBottom: '1.25rem',
                 }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               >
                 Add to cart
               </motion.button>
 
               {/* Quick benefits row */}
-              <div
+              <motion.div
                 style={{
                   display: 'flex',
                   flexWrap: 'nowrap',
                   gap: '1.5rem',
                   marginBottom: '1.75rem',
                 }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               >
                 {[{
                   label: 'One-time payment',
@@ -782,16 +833,20 @@ const ProductDetail = () => {
                     <span>{item.label}</span>
                   </div>
                 ))}
-              </div>
+              </motion.div>
 
               {/* FAQ Section */}
-              <div
+              <motion.div
                 style={{
                   marginBottom: '1.75rem',
                   borderTop: '1px solid #E0E0E0',
                   borderBottom: '1px solid #E0E0E0',
                   overflow: 'hidden',
                 }}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: '-100px' }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               >
                 {[
                   {
@@ -1045,7 +1100,7 @@ const ProductDetail = () => {
                     </AnimatePresence>
                   </div>
                 ))}
-              </div>
+              </motion.div>
 
               {/* Share Button and Review Count - Outside Description Dropdown */}
               <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1125,13 +1180,28 @@ const ProductDetail = () => {
                 </div>
               </div>
             </div>
+            </div>
           </div>
-        </div>
 
         {/* Customer Reviews Section - Same Width as Main Content */}
-        <div ref={customerReviewsSectionRef} style={{ maxWidth: '1100px', margin: '3.5rem auto', padding: '0 1rem' }} className="customer-reviews-section">
+        <motion.div
+          ref={customerReviewsSectionRef}
+          style={{ maxWidth: '1100px', margin: '3.5rem auto', padding: '0 1rem' }}
+          className="customer-reviews-section"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: false, margin: '-100px' }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        >
           {/* Customer Reviews Title - Centered */}
-          <div style={{ textAlign: 'center', marginBottom: '2rem', position: 'relative' }} className="customer-reviews-title">
+          <motion.div
+            style={{ textAlign: 'center', marginBottom: '2rem', position: 'relative' }}
+            className="customer-reviews-title"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.0, ease: [0.16, 1, 0.3, 1] }}
+          >
             <h2 style={{ 
               fontSize: '1.6rem', 
               fontWeight: 600, 
@@ -1140,10 +1210,10 @@ const ProductDetail = () => {
             }}>
               Customer Reviews
             </h2>
-          </div>
+          </motion.div>
 
           {/* Rating Summary Section - Three Column Layout */}
-          <div
+          <motion.div
             className="rating-summary-section"
             style={{
               display: 'grid',
@@ -1154,6 +1224,10 @@ const ProductDetail = () => {
               paddingBottom: '2rem',
               borderBottom: '1px solid #E0E0E0',
             }}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.0, ease: [0.16, 1, 0.3, 1] }}
           >
             {/* Overall Rating (Left) */}
             <div className="overall-rating-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '140px' }}>
@@ -1271,7 +1345,7 @@ const ProductDetail = () => {
                 {reviewSubmitted ? 'Refresh page' : showReviewForm ? 'Cancel review' : 'Write a review'}
               </motion.button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Write Review Form Dropdown */}
           <AnimatePresence>
@@ -1391,7 +1465,7 @@ const ProductDetail = () => {
                               }
                             }}
                             onMouseEnter={() => setHoveredRating(star)}
-                            style={{
+                style={{
                               background: 'none',
                               border: 'none',
                               padding: '4px',
@@ -1572,7 +1646,7 @@ const ProductDetail = () => {
                           height: '120px',
                           border: '2px solid #E0E0E0',
                           borderRadius: '4px',
-                          display: 'flex',
+                  display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
@@ -1926,7 +2000,7 @@ const ProductDetail = () => {
                       ref={refreshButtonRef}
                       style={{ 
                         display: 'flex', 
-                        gap: '1.25rem', 
+                  gap: '1.25rem',
                         justifyContent: 'center',
                         alignItems: 'center',
                         flexWrap: 'wrap',
@@ -1959,7 +2033,7 @@ const ProductDetail = () => {
                       >
                         Refresh page
                       </button>
-                    </div>
+                      </div>
                   ) : (
                     <div style={{ 
                       display: 'flex', 
@@ -2081,7 +2155,7 @@ const ProductDetail = () => {
                   )}
                     </>
                   )}
-                </div>
+                  </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2169,7 +2243,7 @@ const ProductDetail = () => {
                 ))}
               </div>
             )}
-          </div>
+            </div>
 
           {/* Individual Reviews */}
           <div
@@ -2202,7 +2276,7 @@ const ProductDetail = () => {
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   ))}
-                </div>
+          </div>
 
                 {/* Reviewer Info and Date */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -2362,12 +2436,12 @@ const ProductDetail = () => {
               </button>
             </div>
           )}
-        </div>
+        </motion.div>
       </section>
 
 
       <EmailSubscribeFooter />
-      
+
       {/* Toast Container */}
       <ToastContainer
         position="top-right"

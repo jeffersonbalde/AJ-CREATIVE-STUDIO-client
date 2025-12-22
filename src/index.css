@@ -1001,6 +1001,28 @@ label {
   padding: 0 !important;
 }
 
+/* ===== CART PANEL RESPONSIVE ===== */
+@media (max-width: 575.98px) {
+  .cart-panel {
+    top: 16px !important;
+    right: 16px !important;
+    bottom: 16px !important;
+    left: 16px !important;
+    width: auto !important;
+    height: auto !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+  }
+}
+
+@media (min-width: 576px) {
+  .cart-panel {
+    top: 24px !important;
+    bottom: 24px !important;
+    height: auto !important;
+  }
+}
+
 /* Responsive adjustments for image previews */
 @media (max-width: 575.98px) {
   .image-preview-container {
@@ -1034,5 +1056,75 @@ label {
   
   .image-preview-item {
     width: 150px;
+  }
+}
+
+/* Cart panel item layout */
+@media (max-width: 575.98px) {
+  .cart-item-row {
+    padding: 0.75rem 0 !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+
+  .cart-item-row img {
+    width: 70px !important;
+    height: 70px !important;
+  }
+
+  .cart-item-main {
+    gap: 0.25rem !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+  }
+
+  .cart-item-controls {
+    margin-top: 0.15rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .cart-item-title {
+    font-size: 0.78rem !important;
+    line-height: 1.25 !important;
+    max-width: 150px !important;
+  }
+
+  .cart-item-reviews {
+    font-size: 0.7rem !important;
+  }
+
+  .cart-item-side p {
+    font-size: 0.9rem !important;
+  }
+
+/* Cart item text sizing across breakpoints */
+.cart-item-title {
+  font-size: clamp(0.9rem, 2.5vw, 1rem);
+  line-height: 1.35;
+}
+
+.cart-item-reviews {
+  font-size: clamp(0.76rem, 2vw, 0.85rem);
+}
+
+  .cart-item-side {
+    align-items: flex-end !important;
+    gap: 0.25rem !important;
+  }
+
+  .cart-item-side-controls {
+    gap: 0.25rem !important;
+  }
+
+  .cart-quantity-box button {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 1rem !important;
+  }
+
+  .cart-quantity-box span {
+    min-width: 28px !important;
+    font-size: 0.9rem !important;
   }
 }
