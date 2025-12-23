@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { getProductImage } from '../pages/Products';
+import { useCart } from '../contexts/CartContext';
 
 // Helper to match slug style used in Products.jsx
 const createSlug = (title) => {
@@ -58,6 +60,7 @@ const products = [
 ];
 
 const NewArrivals = () => {
+  const { addToCart, setCartOpen } = useCart();
   const [scrollDirection, setScrollDirection] = useState('down');
   const [visibleItems, setVisibleItems] = useState({});
   const lastScrollY = useRef(0);
@@ -382,7 +385,25 @@ const NewArrivals = () => {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        // TODO: wire up real add-to-cart logic
+                        
+                        // Convert price from string (₱413.12) to number (413.12)
+                        const priceNumber = parseFloat(product.newPrice.replace('₱', '').replace(/,/g, ''));
+                        
+                        // Add product to cart
+                        const productToAdd = {
+                          id: product.id,
+                          title: product.title,
+                          price: priceNumber,
+                          image: getProductImage(
+                            product.imageType,
+                            product.color,
+                            product.accentColor,
+                          ),
+                        };
+                        
+                        addToCart(productToAdd);
+                        setCartOpen(true);
+                        toast.success(`${product.title} added to cart`);
                       }}
                     >
                       Add to cart

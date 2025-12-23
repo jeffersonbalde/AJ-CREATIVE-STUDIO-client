@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { toast } from 'react-toastify';
 import confetti from 'canvas-confetti';
@@ -12,34 +13,137 @@ const formatPHP = (value) =>
   }).format(value);
 
 const CartPanel = () => {
+  const navigate = useNavigate();
   const { cartOpen, setCartOpen, cartItems, updateQuantity, removeFromCart, getCartTotal, getCartItemCount } = useCart();
 
   const hasFiredConfettiRef = useRef(false);
   const cartPanelRef = useRef(null);
+  const [selectedDiscount, setSelectedDiscount] = useState(null); // null = auto, 'none' = no discount, '10%', '20%', '30%'
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const itemsCount = getCartItemCount();
   const subtotal = getCartTotal();
-  const threshold = 5; // items needed for max 30% OFF
+  const maxThreshold = 10; // items needed for max 30% OFF
 
-  // Discount tiers based on item count
+  // Calculate auto discount based on item count: BUY 3 GET 10% OFF, BUY 5 GET 20% OFF, BUY 10 GET 30% OFF
+  let autoDiscountPercent = 0;
+  if (itemsCount >= 10) {
+    autoDiscountPercent = 0.3;
+  } else if (itemsCount >= 5) {
+    autoDiscountPercent = 0.2;
+  } else if (itemsCount >= 3) {
+    autoDiscountPercent = 0.1;
+  }
+
+  // Use selected discount or auto-apply based on item count
   let discountPercent = 0;
-  if (itemsCount >= threshold) {
+  if (selectedDiscount === 'none') {
+    discountPercent = 0;
+  } else if (selectedDiscount === '30%') {
     discountPercent = 0.3;
-  } else if (itemsCount >= 4) {
+  } else if (selectedDiscount === '20%') {
     discountPercent = 0.2;
-  } else if (itemsCount >= 2) {
+  } else if (selectedDiscount === '10%') {
     discountPercent = 0.1;
+  } else {
+    // Auto-apply based on item count
+    discountPercent = autoDiscountPercent;
   }
 
   const discountAmount = subtotal * discountPercent;
-  const itemsRemaining = Math.max(0, threshold - itemsCount);
-  const progress = discountPercent / 0.3; // 0 → 1 over 0–30%
+  const progress = Math.min(itemsCount / maxThreshold, 1); // 0 → 1 over 0–10 items
   const isMaxDiscount = discountPercent >= 0.3;
+  const finalTotal = subtotal - discountAmount;
+
+  // Auto-apply discount when user qualifies (if not manually disabled)
+  useEffect(() => {
+    // If user qualifies for a discount and has it disabled, reset to auto mode
+    // This ensures discount is automatically deducted when available
+    if (autoDiscountPercent > 0 && selectedDiscount === 'none') {
+      setSelectedDiscount(null); // Reset to auto-apply mode to deduct from subtotal
+    }
+  }, [itemsCount, autoDiscountPercent]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
+
+  // Get discount badge text
+  const getDiscountBadgeText = () => {
+    if (discountPercent >= 0.3) {
+      return `BUY 10 GET 30% OFF -${formatPHP(discountAmount)}`;
+    } else if (discountPercent >= 0.2) {
+      return `BUY 5 GET 20% OFF -${formatPHP(discountAmount)}`;
+    } else if (discountPercent >= 0.1) {
+      return `BUY 3 GET 10% OFF -${formatPHP(discountAmount)}`;
+    }
+    return null;
+  };
+
+  // Get discount options for dropdown
+  const getDiscountOptions = () => {
+    const options = [
+      { value: 'none', label: 'Select discount' },
+    ];
+    
+    if (itemsCount >= 3) {
+      options.push({ value: '10%', label: 'BUY 3 GET 10% OFF' });
+    }
+    if (itemsCount >= 5) {
+      options.push({ value: '20%', label: 'BUY 5 GET 20% OFF' });
+    }
+    if (itemsCount >= 10) {
+      options.push({ value: '30%', label: 'BUY 10 GET 30% OFF' });
+    }
+    
+    return options;
+  };
+
+  const handleDiscountSelect = (value) => {
+    if (value === 'none') {
+      setSelectedDiscount('none');
+    } else {
+      setSelectedDiscount(value);
+    }
+    setDropdownOpen(false);
+  };
+
+  const handleRemoveDiscount = () => {
+    setSelectedDiscount('none');
+  };
+
+  // Calculate next discount tier and items remaining
+  let nextTier = '';
+  let itemsRemaining = 0;
+  if (itemsCount < 3) {
+    nextTier = '10% OFF';
+    itemsRemaining = 3 - itemsCount;
+  } else if (itemsCount < 5) {
+    nextTier = '20% OFF';
+    itemsRemaining = 5 - itemsCount;
+  } else if (itemsCount < 10) {
+    nextTier = '30% OFF';
+    itemsRemaining = 10 - itemsCount;
+  }
 
   const discountTopText =
     discountPercent >= 0.3
       ? `Congratulations ${formatPHP(discountAmount)} OFF applied to your entire order!`
-      : `You are ${itemsRemaining} item${itemsRemaining !== 1 ? 's' : ''} away from 30% OFF`;
+      : `You are ${itemsRemaining} item${itemsRemaining !== 1 ? 's' : ''} away from ${nextTier}`;
 
   // Lock page scroll when cart panel is open
   useEffect(() => {
@@ -145,12 +249,13 @@ const CartPanel = () => {
               width: '100%',
               maxWidth: '400px',
               height: '100vh',
+              maxHeight: '100vh', // Ensure it doesn't exceed viewport
               backgroundColor: '#FFFFFF',
               boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
               zIndex: 10000,
               display: 'flex',
               flexDirection: 'column',
-              overflowY: 'auto',
+              overflow: 'hidden', // Prevent outer scroll, let inner content scroll
             }}
           >
             {/* Cart Header */}
@@ -226,9 +331,12 @@ const CartPanel = () => {
               {/* Cart Content */}
             <div style={{
               flex: 1,
+              minHeight: 0, // Critical for flex scrolling on mobile
               padding: '1.5rem',
               display: 'flex',
               flexDirection: 'column',
+              overflowY: 'auto', // Enable scrolling on the content area
+              WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
             }}>
               {/* Discount Progress Panel - only show when there are items */}
               {cartItems.length > 0 && (
@@ -287,17 +395,6 @@ const CartPanel = () => {
                           <span>20% OFF</span>
                           <span>30% OFF</span>
                         </div>
-                        <p
-                          style={{
-                            textAlign: 'center',
-                            fontSize: '0.85rem',
-                            color: '#333',
-                            marginTop: '0.9rem',
-                            fontWeight: 500,
-                          }}
-                        >
-                          Your cart is reserved for 09:21 minutes!
-                        </p>
                       </>
                     );
                   })()}
@@ -592,6 +689,191 @@ const CartPanel = () => {
                     borderTop: '1px solid #E0E0E0',
                     paddingTop: '1.5rem',
                   }}>
+                    {/* Discount Dropdown/Badge - Only show if user qualifies for at least one discount (3+ items) */}
+                    {itemsCount >= 3 && (
+                      <div style={{ marginBottom: '1rem', position: 'relative' }} ref={dropdownRef}>
+                        {discountPercent > 0 ? (
+                        // Show badge when discount is applied
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: '#F5F5F5',
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '4px',
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                          }}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#666"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                              <line x1="3" y1="6" x2="21" y2="6" />
+                              <path d="M16 10a4 4 0 0 1-8 0" />
+                            </svg>
+                            <span style={{
+                              fontSize: '0.85rem',
+                              fontWeight: 600,
+                              color: '#333',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.3px',
+                            }}>
+                              {getDiscountBadgeText()}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRemoveDiscount}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#E8E8E8';
+                              e.currentTarget.style.color = '#D32F2F';
+                              e.currentTarget.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = '#666';
+                              e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#666',
+                              cursor: 'pointer',
+                              padding: '0.35rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              borderRadius: '50%',
+                              transition: 'all 0.2s ease',
+                              width: '24px',
+                              height: '24px',
+                            }}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        // Show dropdown when no discount or discount removed
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            onClick={() => setDropdownOpen(!dropdownOpen)}
+                            style={{
+                              width: '100%',
+                              padding: '0.75rem',
+                              border: '1px solid #E0E0E0',
+                              borderRadius: '4px',
+                              backgroundColor: '#FFFFFF',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              fontSize: '0.95rem',
+                              color: selectedDiscount === 'none' || discountPercent === 0 ? '#999' : '#000',
+                            }}
+                          >
+                            <span>
+                              {selectedDiscount === 'none' || discountPercent === 0 
+                                ? 'Select discount' 
+                                : getDiscountOptions().find(opt => opt.value === selectedDiscount)?.label || 'Select discount'}
+                            </span>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#666"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              style={{
+                                transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.2s ease',
+                              }}
+                            >
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                          </div>
+                          
+                          {dropdownOpen && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              right: 0,
+                              marginTop: '4px',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #E0E0E0',
+                              borderRadius: '4px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                              zIndex: 1000,
+                              maxHeight: '200px',
+                              overflowY: 'auto',
+                            }}>
+                              {getDiscountOptions().map((option, index) => {
+                                const isSelected = (index === 0 && (selectedDiscount === 'none' || selectedDiscount === null)) || 
+                                                  (option.value === selectedDiscount && selectedDiscount !== 'none');
+                                return (
+                                  <div
+                                    key={option.value}
+                                    onClick={() => handleDiscountSelect(option.value)}
+                                    style={{
+                                      padding: '0.75rem',
+                                      cursor: 'pointer',
+                                      backgroundColor: isSelected ? '#0066CC' : '#FFFFFF',
+                                      color: isSelected ? '#FFFFFF' : '#000',
+                                      fontSize: '0.95rem',
+                                      borderBottom: index < getDiscountOptions().length - 1 ? '1px solid #F0F0F0' : 'none',
+                                      transition: 'background-color 0.2s ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isSelected) {
+                                        e.currentTarget.style.backgroundColor = '#F5F5F5';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isSelected) {
+                                        e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                      }
+                                    }}
+                                  >
+                                    {option.label}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      </div>
+                    )}
+
+                    {/* Subtotal */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -605,15 +887,15 @@ const CartPanel = () => {
                       }}>
                         Subtotal
                       </span>
-                        <span
-                          style={{
-                            fontSize: '1.25rem',
-                            fontWeight: 700,
-                            color: '#000',
-                          }}
-                        >
-                          {formatPHP(getCartTotal())}
-                        </span>
+                      <span
+                        style={{
+                          fontSize: '1.25rem',
+                          fontWeight: 700,
+                          color: '#000',
+                        }}
+                      >
+                        {formatPHP(finalTotal)}
+                      </span>
                     </div>
                     <motion.button
                       whileHover={{ y: -2, backgroundColor: '#222222' }}
@@ -632,8 +914,8 @@ const CartPanel = () => {
                         marginTop: '0.25rem',
                       }}
                       onClick={() => {
-                        toast.success('Proceeding to checkout...');
-                        // Add checkout logic here
+                        setCartOpen(false);
+                        navigate('/checkout');
                       }}
                     >
                       Checkout

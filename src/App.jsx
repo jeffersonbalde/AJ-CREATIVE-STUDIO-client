@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Contact from './pages/Contact';
+import Checkout from './pages/Checkout';
 import { CartProvider } from './contexts/CartContext';
 import CartPanel from './components/CartPanel';
 
@@ -23,6 +24,7 @@ const App = () => {
               <Route path="/all-products" element={<Products />} />
               <Route path="/products/:slug" element={<ProductDetail />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/checkout" element={<Checkout />} />
 
               {/* Legacy routes still mapped to Home for now */}
               <Route path="/bundles" element={<Home />} />
