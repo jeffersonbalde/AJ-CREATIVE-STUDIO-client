@@ -1,0 +1,131 @@
+// src/layout/Sidebar.jsx
+import React, { useMemo } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useLocation, Link } from "react-router-dom";
+
+const Sidebar = ({ onCloseSidebar }) => {
+  const { user, admin, loading, isAuthenticated } = useAuth();
+  const location = useLocation();
+  
+  // Check if user is admin - STATIC CHECK (no DB lookup needed)
+  // If we're authenticated and on admin routes, assume admin until proven otherwise
+  const currentUser = user || admin;
+  const hasToken = Boolean(localStorage.getItem('token') || localStorage.getItem('admin_token'));
+  const isOnAdminRoute = location.pathname.startsWith('/admin');
+  
+  // Determine if admin: check user data if available, otherwise assume admin if authenticated on admin routes
+  const isAdmin = useMemo(() => {
+    if (currentUser) {
+      // If user data is loaded, check role/type/username
+      return currentUser.role === 'admin' || 
+             currentUser.type === 'admin' || 
+             currentUser.username === 'admin@admin.com';
+    }
+    // If user data not loaded yet but we're authenticated on admin routes, assume admin
+    // This allows immediate display of "System Administrator" without waiting for user data
+    return hasToken && isOnAdminRoute && !loading;
+  }, [currentUser, hasToken, isOnAdminRoute, loading]);
+  
+  // Static display name - admin is always "System Administrator" (no loading state), personnel loads their name
+  const displayName = isAdmin ? "System Administrator" : (currentUser?.name || currentUser?.username || "User");
+  const displayRole = isAdmin ? "System Administrator" : (currentUser?.position || currentUser?.role || "User");
+
+  const isActiveLink = (href) => {
+    return location.pathname === href;
+  };
+
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768 && onCloseSidebar) {
+      onCloseSidebar();
+    }
+  };
+
+  const handleLinkClick = () => {
+    closeSidebarOnMobile();
+  };
+
+  // Admin menu items
+  const adminMenuItems = [
+    {
+      heading: "Core",
+      items: [
+        {
+          icon: "fas fa-tachometer-alt",
+          label: "Dashboard",
+          href: "/admin/dashboard",
+        },
+      ],
+    },
+    {
+      heading: "Product Management",
+      items: [
+        {
+          icon: "fas fa-box",
+          label: "Products",
+          href: "/admin/products",
+        },
+      ],
+    },
+    {
+      heading: "Settings",
+      items: [
+        {
+          icon: "fas fa-user",
+          label: "Profile",
+          href: "/admin/profile",
+        },
+        {
+          icon: "fas fa-cog",
+          label: "Settings",
+          href: "/admin/settings",
+        },
+      ],
+    },
+  ];
+
+  const renderMenuSection = (section, index) => (
+    <React.Fragment key={index}>
+      <div className="sb-sidenav-menu-heading">{section.heading}</div>
+      {section.items.map((item, itemIndex) => {
+        const isActive = isActiveLink(item.href);
+        return (
+          <Link
+            key={itemIndex}
+            className={`nav-link ${isActive ? "active" : ""}`}
+            to={item.href}
+            onClick={handleLinkClick}
+          >
+            <div className="sb-nav-link-icon">
+              <i className={item.icon}></i>
+            </div>
+            {item.label}
+            {isActive && (
+              <span className="position-absolute top-50 end-0 translate-middle-y me-3">
+                <i className="fas fa-chevron-right small"></i>
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </React.Fragment>
+  );
+
+  return (
+    <nav className="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
+      <div className="sb-sidenav-menu">
+        <div className="nav">
+          {adminMenuItems.map(renderMenuSection)}
+        </div>
+      </div>
+
+      <div className="sb-sidenav-footer">
+        <div className="small">Logged in as:</div>
+        <span className="user-name">{displayName}</span>
+        <div className="small text-muted">{displayRole}</div>
+      </div>
+    </nav>
+  );
+};
+
+export default Sidebar;
+

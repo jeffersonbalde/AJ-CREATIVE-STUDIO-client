@@ -510,8 +510,12 @@ const Checkout = () => {
   };
 
   const handlePayNow = () => {
-    // TODO: Implement payment processing
-    // Redirect to Xendit payment gateway
+    // Navigate to GCash payment page with order total
+    navigate('/gcash-payment', {
+      state: {
+        total: discountPercent > 0 ? finalTotal : subtotal,
+      },
+    });
   };
 
   if (cartItems.length === 0) {
