@@ -5,6 +5,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProductFormModal from './ProductFormModal';
 import { showAlert } from '../../services/notificationService';
+import MarkdownRenderer from '../../components/MarkdownRenderer';
 
 const ProductList = () => {
   const { token } = useAuth();
@@ -15,7 +16,6 @@ const ProductList = () => {
   const [actionLock, setActionLock] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [availabilityFilter, setAvailabilityFilter] = useState('');
   const [categories, setCategories] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -35,12 +35,12 @@ const ProductList = () => {
 
   useEffect(() => {
     filterAndSortProducts();
-  }, [products, searchTerm, categoryFilter, availabilityFilter, sortField, sortDirection]);
+  }, [products, searchTerm, categoryFilter, sortField, sortDirection]);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${apiBaseUrl}/api/products?per_page=1000`, {
+      const response = await fetch(`${apiBaseUrl}/products?per_page=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
@@ -50,13 +50,20 @@ const ProductList = () => {
       if (response.ok) {
         const data = await response.json();
         // Handle paginated response - API returns { products: [...], pagination: {...} }
+        let productsData = [];
         if (data.products && Array.isArray(data.products)) {
-          setProducts(data.products);
+          productsData = data.products;
         } else if (data.success && data.products && Array.isArray(data.products)) {
-          setProducts(data.products);
-        } else {
-          setProducts([]);
+          productsData = data.products;
         }
+        
+        // Debug: Log first product to check structure
+        if (productsData.length > 0) {
+          console.log('Sample product data:', productsData[0]);
+          console.log('Thumbnail image field:', productsData[0].thumbnail_image);
+        }
+        
+        setProducts(productsData);
       } else {
         toast.error('Failed to load products');
       }
@@ -70,7 +77,8 @@ const ProductList = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`${apiBaseUrl}/api/products/categories/list`, {
+      // Use the same endpoint as ProductCategories component
+      const response = await fetch(`${apiBaseUrl}/product-categories?per_page=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
@@ -79,10 +87,26 @@ const ProductList = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setCategories(data.categories || []);
+        // Extract category names from the categories array (same structure as ProductCategories)
+        if (data.success && data.categories && Array.isArray(data.categories)) {
+          const categoryNames = data.categories.map(cat => cat.name || null).filter(Boolean);
+          setCategories(categoryNames);
+        } else if (data.categories && Array.isArray(data.categories)) {
+          // Fallback: if categories is directly an array
+          const categoryNames = data.categories.map(cat => 
+            typeof cat === 'string' ? cat : (cat.name || null)
+          ).filter(Boolean);
+          setCategories(categoryNames);
+        } else {
+          setCategories([]);
+        }
+      } else {
+        console.error('Failed to fetch categories:', response.status);
+        setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
+      setCategories([]);
     }
   };
 
@@ -98,7 +122,7 @@ const ProductList = () => {
           product.subtitle,
           product.category,
           product.description,
-        ];
+        ].filter(Boolean);
         return fieldsToSearch.some(
           (field) =>
             typeof field === 'string' &&
@@ -112,10 +136,6 @@ const ProductList = () => {
       filtered = filtered.filter((product) => product.category === categoryFilter);
     }
 
-    // Availability filter
-    if (availabilityFilter) {
-      filtered = filtered.filter((product) => product.availability === availabilityFilter);
-    }
 
     // Sorting
     filtered.sort((a, b) => {
@@ -186,7 +206,7 @@ const ProductList = () => {
     showAlert.processing('Deleting Product', 'Please wait while we remove this product...');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/products/${id}`, {
+      const response = await fetch(`${apiBaseUrl}/products/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -216,7 +236,6 @@ const ProductList = () => {
   const clearFilters = () => {
     setSearchTerm('');
     setCategoryFilter('');
-    setAvailabilityFilter('');
   };
 
   const refreshAllData = async () => {
@@ -255,61 +274,44 @@ const ProductList = () => {
     total: products.length,
     active: products.filter((p) => p.is_active).length,
     inactive: products.filter((p) => !p.is_active).length,
-    inStock: products.filter((p) => p.availability === 'In Stock').length,
   };
 
   // Skeleton loaders
-  const TableRowSkeleton = () => (
-    <tr className="align-middle" style={{ height: '70px' }}>
-      <td className="text-center">
-        <div className="placeholder-wave">
-          <span className="placeholder col-4" style={{ height: '20px' }}></span>
+  const ProductCardSkeleton = () => (
+    <div className="col-6 col-md-4 col-lg-3 col-xl-2-4">
+      <div className="card h-100 shadow-sm border" style={{ borderRadius: '8px', overflow: 'hidden' }}>
+        <div
+          className="placeholder-wave"
+          style={{
+            height: '200px',
+            backgroundColor: 'var(--background-light)',
+          }}
+        >
+          <span className="placeholder w-100 h-100"></span>
         </div>
-      </td>
-      <td className="text-center">
-        <div className="d-flex justify-content-center gap-1">
-          {[1, 2].map((item) => (
-            <div
-              key={item}
-              className="placeholder action-placeholder"
-              style={{ width: '36px', height: '36px', borderRadius: '6px' }}
-            ></div>
-          ))}
+        <div className="card-body p-3">
+          <div className="placeholder-wave mb-2">
+            <span className="placeholder col-10" style={{ height: '20px' }}></span>
+          </div>
+          <div className="placeholder-wave mb-2">
+            <span className="placeholder col-6" style={{ height: '20px', borderRadius: '12px' }}></span>
+          </div>
+          <div className="placeholder-wave">
+            <span className="placeholder col-8" style={{ height: '24px' }}></span>
+          </div>
         </div>
-      </td>
-      <td>
-        <div className="placeholder-wave mb-1">
-          <span className="placeholder col-8" style={{ height: '16px' }}></span>
-        </div>
-        <div className="placeholder-wave">
-          <span className="placeholder col-6" style={{ height: '14px' }}></span>
-        </div>
-      </td>
-      <td>
-        <div className="placeholder-wave">
-          <span className="placeholder col-6" style={{ height: '24px', borderRadius: '12px' }}></span>
-        </div>
-      </td>
-      <td>
-        <div className="placeholder-wave">
-          <span className="placeholder col-8" style={{ height: '16px' }}></span>
-        </div>
-      </td>
-      <td>
-        <div className="placeholder-wave">
-          <span className="placeholder col-6" style={{ height: '24px', borderRadius: '12px' }}></span>
-        </div>
-      </td>
-      <td>
-        <div className="placeholder-wave">
-          <span className="placeholder col-6" style={{ height: '24px', borderRadius: '12px' }}></span>
-        </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 
   const StatsCardSkeleton = () => (
-    <div className="card stats-card h-100">
+    <div 
+      className="card stats-card h-100 shadow-sm"
+      style={{ 
+        border: '1px solid rgba(0, 0, 0, 0.125)',
+        borderRadius: '0.375rem'
+      }}
+    >
       <div className="card-body p-3">
         <div className="d-flex align-items-center">
           <div className="flex-grow-1">
@@ -422,7 +424,13 @@ const ProductList = () => {
           {loading ? (
             <StatsCardSkeleton />
           ) : (
-            <div className="card stats-card h-100">
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
               <div className="card-body p-3">
                 <div className="d-flex align-items-center">
                   <div className="flex-grow-1">
@@ -454,7 +462,13 @@ const ProductList = () => {
           {loading ? (
             <StatsCardSkeleton />
           ) : (
-            <div className="card stats-card h-100">
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
               <div className="card-body p-3">
                 <div className="d-flex align-items-center">
                   <div className="flex-grow-1">
@@ -486,7 +500,13 @@ const ProductList = () => {
           {loading ? (
             <StatsCardSkeleton />
           ) : (
-            <div className="card stats-card h-100">
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
               <div className="card-body p-3">
                 <div className="d-flex align-items-center">
                   <div className="flex-grow-1">
@@ -507,38 +527,6 @@ const ProductList = () => {
                     <i
                       className="fas fa-exclamation-triangle fa-2x"
                       style={{ color: '#dc3545', opacity: 0.7 }}
-                    ></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="col-6 col-md-3">
-          {loading ? (
-            <StatsCardSkeleton />
-          ) : (
-            <div className="card stats-card h-100">
-              <div className="card-body p-3">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <div
-                      className="text-xs fw-semibold text-uppercase mb-1"
-                      style={{ color: 'var(--primary-dark)' }}
-                    >
-                      In Stock
-                    </div>
-                    <div
-                      className="h4 mb-0 fw-bold"
-                      style={{ color: 'var(--primary-dark)' }}
-                    >
-                      {statistics.inStock}
-                    </div>
-                  </div>
-                  <div className="col-auto">
-                    <i
-                      className="fas fa-box fa-2x"
-                      style={{ color: 'var(--primary-color)', opacity: 0.7 }}
                     ></i>
                   </div>
                 </div>
@@ -627,30 +615,6 @@ const ProductList = () => {
                 className="form-label small fw-semibold mb-1"
                 style={{ color: 'var(--text-muted)' }}
               >
-                Availability
-              </label>
-              <select
-                className="form-select form-select-sm"
-                value={availabilityFilter}
-                onChange={(e) => setAvailabilityFilter(e.target.value)}
-                disabled={loading || isActionDisabled()}
-                style={{
-                  backgroundColor: 'var(--input-bg)',
-                  borderColor: 'var(--input-border)',
-                  color: 'var(--input-text)',
-                }}
-              >
-                <option value="">All Availability</option>
-                <option value="In Stock">In Stock</option>
-                <option value="Out of Stock">Out of Stock</option>
-                <option value="Pre-order">Pre-order</option>
-              </select>
-            </div>
-            <div className="col-md-2">
-              <label
-                className="form-label small fw-semibold mb-1"
-                style={{ color: 'var(--text-muted)' }}
-              >
                 Items per page
               </label>
               <select
@@ -693,7 +657,7 @@ const ProductList = () => {
               {!loading && (
                 <small className="opacity-75 ms-2">
                   ({filteredProducts.length} found
-                  {searchTerm || categoryFilter || availabilityFilter
+                  {searchTerm || categoryFilter
                     ? ' after filtering'
                     : ''}
                   )
@@ -705,39 +669,12 @@ const ProductList = () => {
 
         <div className="card-body p-0">
           {loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
-                <thead style={{ backgroundColor: 'var(--background-light)' }}>
-                  <tr>
-                    <th style={{ width: '5%' }} className="text-center small fw-semibold">
-                      #
-                    </th>
-                    <th style={{ width: '15%' }} className="text-center small fw-semibold">
-                      Actions
-                    </th>
-                    <th style={{ width: '25%' }} className="small fw-semibold">
-                      Product Information
-                    </th>
-                    <th style={{ width: '15%' }} className="small fw-semibold">
-                      Category
-                    </th>
-                    <th style={{ width: '15%' }} className="small fw-semibold">
-                      Price
-                    </th>
-                    <th style={{ width: '12%' }} className="small fw-semibold">
-                      Availability
-                    </th>
-                    <th style={{ width: '13%' }} className="small fw-semibold">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...Array(5)].map((_, index) => (
-                    <TableRowSkeleton key={index} />
-                  ))}
-                </tbody>
-              </table>
+            <div className="p-3">
+              <div className="row g-3">
+                {[...Array(8)].map((_, index) => (
+                  <ProductCardSkeleton key={index} />
+                ))}
+              </div>
               <div className="text-center py-4">
                 <div
                   className="spinner-border me-2"
@@ -792,219 +729,299 @@ const ProductList = () => {
             </div>
           ) : (
             <>
-              <div className="table-responsive">
-                <table className="table table-striped table-hover mb-0">
-                  <thead style={{ backgroundColor: 'var(--background-light)' }}>
-                    <tr>
-                      <th
-                        style={{ width: '5%' }}
-                        className="text-center small fw-semibold"
-                      >
-                        #
-                      </th>
-                      <th
-                        style={{ width: '15%' }}
-                        className="text-center small fw-semibold"
-                      >
-                        Actions
-                      </th>
-                      <th
-                        style={{ width: '25%' }}
-                        className="small fw-semibold"
-                      >
-                        <button
-                          className="btn btn-link p-0 border-0 text-decoration-none fw-semibold text-start"
-                          onClick={() => handleSort('title')}
-                          disabled={isActionDisabled()}
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          Product Information
-                          <i className={`ms-1 ${getSortIcon('title')}`}></i>
-                        </button>
-                      </th>
-                      <th
-                        style={{ width: '15%' }}
-                        className="small fw-semibold"
-                      >
-                        <button
-                          className="btn btn-link p-0 border-0 text-decoration-none fw-semibold text-start"
-                          onClick={() => handleSort('category')}
-                          disabled={isActionDisabled()}
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          Category
-                          <i className={`ms-1 ${getSortIcon('category')}`}></i>
-                        </button>
-                      </th>
-                      <th
-                        style={{ width: '15%' }}
-                        className="small fw-semibold"
-                      >
-                        <button
-                          className="btn btn-link p-0 border-0 text-decoration-none fw-semibold text-start"
-                          onClick={() => handleSort('price')}
-                          disabled={isActionDisabled()}
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          Price
-                          <i className={`ms-1 ${getSortIcon('price')}`}></i>
-                        </button>
-                      </th>
-                      <th
-                        style={{ width: '12%' }}
-                        className="small fw-semibold"
-                      >
-                        Availability
-                      </th>
-                      <th
-                        style={{ width: '13%' }}
-                        className="small fw-semibold"
-                      >
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentProducts.map((product, index) => (
-                      <tr key={product.id} className="align-middle">
-                        <td
-                          className="text-center fw-bold"
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          {startIndex + index + 1}
-                        </td>
-                        <td className="text-center">
-                          <div className="d-flex justify-content-center gap-1">
-                            <button
-                              className="btn btn-warning btn-sm text-white"
-                              onClick={() => {
-                                setEditingProduct(product);
-                                setShowProductForm(true);
-                              }}
-                              disabled={isActionDisabled(product.id)}
-                              title="Edit Product"
-                              style={{
-                                width: '36px',
-                                height: '36px',
-                                borderRadius: '6px',
-                                transition: 'all 0.2s ease-in-out',
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!e.target.disabled) {
-                                  e.target.style.transform = 'translateY(-1px)';
-                                  e.target.style.boxShadow =
-                                    '0 4px 8px rgba(0,0,0,0.2)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = 'translateY(0)';
-                                e.target.style.boxShadow = 'none';
-                              }}
-                            >
-                              {actionLoading === product.id ? (
-                                <span
-                                  className="spinner-border spinner-border-sm"
-                                  role="status"
-                                ></span>
-                              ) : (
-                                <i className="fas fa-edit"></i>
-                              )}
-                            </button>
+              {/* Sort Controls */}
+              <div className="px-3 py-2 border-bottom d-flex flex-wrap align-items-center gap-2" style={{ backgroundColor: 'var(--background-light)' }}>
+                <small className="text-muted fw-semibold">Sort by:</small>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => handleSort('title')}
+                  disabled={isActionDisabled()}
+                  style={{ fontSize: '0.875rem' }}
+                >
+                  Title <i className={`ms-1 ${getSortIcon('title')}`}></i>
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => handleSort('category')}
+                  disabled={isActionDisabled()}
+                  style={{ fontSize: '0.875rem' }}
+                >
+                  Category <i className={`ms-1 ${getSortIcon('category')}`}></i>
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => handleSort('price')}
+                  disabled={isActionDisabled()}
+                  style={{ fontSize: '0.875rem' }}
+                >
+                  Price <i className={`ms-1 ${getSortIcon('price')}`}></i>
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => handleSort('created_at')}
+                  disabled={isActionDisabled()}
+                  style={{ fontSize: '0.875rem' }}
+                >
+                  Date <i className={`ms-1 ${getSortIcon('created_at')}`}></i>
+                </button>
+              </div>
 
-                            <button
-                              className="btn btn-danger btn-sm text-white"
-                              onClick={() => handleDelete(product.id)}
-                              disabled={isActionDisabled(product.id)}
-                              title="Delete Product"
+              {/* Product Grid */}
+              <div className="p-3">
+                <div className="row g-3">
+                  {currentProducts.map((product) => {
+                    // Try multiple possible field names for thumbnail image
+                    const thumbnailPath = product.thumbnail_image || 
+                                         product.thumbnail || 
+                                         product.image || 
+                                         null;
+                    
+                    // Build thumbnail URL - handle different path formats
+                    let thumbnailUrl = null;
+                    if (thumbnailPath) {
+                      // If it's already a full URL, use it as is
+                      if (thumbnailPath.startsWith('http://') || thumbnailPath.startsWith('https://')) {
+                        thumbnailUrl = thumbnailPath;
+                      }
+                      // If it starts with storage/, just prepend apiBaseUrl
+                      else if (thumbnailPath.startsWith('storage/')) {
+                        thumbnailUrl = `${apiBaseUrl}/${thumbnailPath}`;
+                      }
+                      // Otherwise, prepend storage/ path
+                      else {
+                        thumbnailUrl = `${apiBaseUrl}/storage/${thumbnailPath}`;
+                      }
+                    }
+                    
+                    return (
+                      <div key={product.id} className="col-6 col-md-4 col-lg-3 col-xl-2-4">
+                        <div
+                          className="card h-100 product-card shadow-sm border"
+                          style={{
+                            transition: 'all 0.3s ease',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-4px)';
+                            e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.15)';
+                            const actions = e.currentTarget.querySelector('.product-card-actions');
+                            if (actions) actions.style.opacity = '1';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                            const actions = e.currentTarget.querySelector('.product-card-actions');
+                            if (actions) actions.style.opacity = '0';
+                          }}
+                        >
+                          {/* Product Image */}
+                          <div
+                            className="position-relative"
+                            style={{
+                              height: '200px',
+                              backgroundColor: 'var(--background-light)',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {thumbnailUrl ? (
+                              <img
+                                src={thumbnailUrl}
+                                alt={product.title}
+                                className="w-100 h-100"
+                                style={{
+                                  objectFit: 'cover',
+                                  transition: 'transform 0.3s ease',
+                                }}
+                                onError={(e) => {
+                                  console.error('Failed to load thumbnail image:', thumbnailUrl);
+                                  e.target.style.display = 'none';
+                                  const placeholder = e.target.nextElementSibling;
+                                  if (placeholder) {
+                                    placeholder.style.display = 'flex';
+                                  }
+                                }}
+                                onLoad={() => {
+                                  console.log('Thumbnail image loaded successfully:', thumbnailUrl);
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className="w-100 h-100 d-flex align-items-center justify-content-center"
                               style={{
-                                width: '36px',
-                                height: '36px',
-                                borderRadius: '6px',
-                                transition: 'all 0.2s ease-in-out',
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!e.target.disabled) {
-                                  e.target.style.transform = 'translateY(-1px)';
-                                  e.target.style.boxShadow =
-                                    '0 4px 8px rgba(0,0,0,0.2)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = 'translateY(0)';
-                                e.target.style.boxShadow = 'none';
+                                display: thumbnailUrl ? 'none' : 'flex',
+                                backgroundColor: 'var(--background-light)',
                               }}
                             >
-                              {actionLoading === product.id ? (
-                                <span
-                                  className="spinner-border spinner-border-sm"
-                                  role="status"
-                                ></span>
-                              ) : (
-                                <i className="fas fa-trash"></i>
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                        <td>
-                          <div>
+                              <i
+                                className="fas fa-image fa-3x"
+                                style={{ color: 'var(--text-muted)', opacity: 0.3 }}
+                              ></i>
+                            </div>
+                            
+                            {/* Status Badge Overlay */}
+                            <div className="position-absolute top-0 end-0 m-2">
+                              <span
+                                className={`badge ${
+                                  product.is_active ? 'bg-success' : 'bg-secondary'
+                                }`}
+                                style={{ fontSize: '0.75rem' }}
+                              >
+                                {product.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+
+                            {/* Sale Badge */}
+                            {product.on_sale && (
+                              <div className="position-absolute top-0 start-0 m-2">
+                                <span className="badge bg-danger" style={{ fontSize: '0.75rem' }}>
+                                  Sale
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Action Buttons Overlay */}
                             <div
-                              className="fw-medium mb-1"
-                              style={{ color: 'var(--text-primary)' }}
+                              className="position-absolute bottom-0 end-0 m-2 d-flex gap-1 product-card-actions"
+                              style={{ opacity: 0, transition: 'opacity 0.3s ease' }}
+                            >
+                              <button
+                                className="btn btn-warning btn-sm text-white"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingProduct(product);
+                                  setShowProductForm(true);
+                                }}
+                                disabled={isActionDisabled(product.id)}
+                                title="Edit Product"
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '6px',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {actionLoading === product.id ? (
+                                  <span
+                                    className="spinner-border spinner-border-sm"
+                                    role="status"
+                                  ></span>
+                                ) : (
+                                  <i className="fas fa-edit" style={{ fontSize: '0.75rem' }}></i>
+                                )}
+                              </button>
+                              <button
+                                className="btn btn-danger btn-sm text-white"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(product.id);
+                                }}
+                                disabled={isActionDisabled(product.id)}
+                                title="Delete Product"
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '6px',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {actionLoading === product.id ? (
+                                  <span
+                                    className="spinner-border spinner-border-sm"
+                                    role="status"
+                                  ></span>
+                                ) : (
+                                  <i className="fas fa-trash" style={{ fontSize: '0.75rem' }}></i>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Product Info */}
+                          <div className="card-body p-3">
+                            <h6
+                              className="card-title fw-semibold mb-2"
+                              style={{
+                                color: 'var(--text-primary)',
+                                fontSize: '0.95rem',
+                                lineHeight: '1.3em',
+                                minHeight: '2.6em',
+                                maxHeight: '2.6em',
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                textOverflow: 'ellipsis',
+                                wordBreak: 'break-word',
+                              }}
+                              title={product.title}
                             >
                               {product.title}
+                            </h6>
+
+                            {/* Category */}
+                            {product.category && (
+                              <div className="mb-2">
+                                <span className="badge bg-secondary" style={{ fontSize: '0.75rem' }}>
+                                  {product.category}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Price */}
+                            <div className="mb-2">
+                              {product.on_sale && product.old_price && (
+                                <div
+                                  className="text-decoration-line-through text-muted"
+                                  style={{ fontSize: '0.75rem' }}
+                                >
+                                  {formatCurrency(product.old_price)}
+                                </div>
+                              )}
+                              <div
+                                className="fw-bold"
+                                style={{
+                                  color: 'var(--primary-color)',
+                                  fontSize: '1.1rem',
+                                }}
+                              >
+                                {formatCurrency(product.price)}
+                              </div>
                             </div>
+
+                            {/* Subtitle Preview (render HTML from subtitle) */}
                             {product.subtitle && (
                               <div
-                                className="small text-break"
-                                style={{ color: 'var(--text-muted)' }}
-                              >
-                                {product.subtitle}
-                              </div>
+                                className="small text-muted"
+                                style={{
+                                  fontSize: '0.75rem',
+                                  minHeight: '2.25em',
+                                  maxHeight: '2.25em',
+                                  overflow: 'hidden',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  textOverflow: 'ellipsis',
+                                  lineHeight: '1.125em',
+                                  wordBreak: 'break-word',
+                                }}
+                                title={product.subtitle.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()}
+                                dangerouslySetInnerHTML={{ __html: product.subtitle }}
+                              />
                             )}
                           </div>
-                        </td>
-                        <td>
-                          <span className="badge bg-secondary">{product.category}</span>
-                        </td>
-                        <td>
-                          <div style={{ color: 'var(--text-primary)' }}>
-                            {product.on_sale && product.old_price && (
-                              <div className="text-decoration-line-through text-muted small">
-                                {formatCurrency(product.old_price)}
-                              </div>
-                            )}
-                            <strong>{formatCurrency(product.price)}</strong>
-                            {product.on_sale && (
-                              <span className="badge bg-danger ms-2">Sale</span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              product.availability === 'In Stock'
-                                ? 'bg-success'
-                                : product.availability === 'Out of Stock'
-                                ? 'bg-danger'
-                                : 'bg-warning'
-                            }`}
-                          >
-                            {product.availability}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              product.is_active ? 'bg-success' : 'bg-secondary'
-                            }`}
-                          >
-                            {product.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Pagination */}
@@ -1223,15 +1240,8 @@ const ProductList = () => {
             setEditingProduct(null);
           }}
           onSave={(savedProduct) => {
-            if (editingProduct) {
-              setProducts((prev) =>
-                prev.map((p) =>
-                  p.id === savedProduct.id ? savedProduct : p
-                )
-              );
-            } else {
-              fetchProducts();
-            }
+            // Always refetch to ensure UI matches DB (rich text, images, etc.)
+            fetchProducts();
             setShowProductForm(false);
             setEditingProduct(null);
           }}

@@ -10,9 +10,12 @@ const Portal = ({ children }) => {
     
     // Prevent body scroll when portal is mounted
     document.body.style.overflow = 'hidden';
+    // Add class to body for CSS targeting
+    document.body.classList.add('modal-open');
     
     return () => {
       document.body.style.overflow = 'unset';
+      document.body.classList.remove('modal-open');
     };
   }, []);
 

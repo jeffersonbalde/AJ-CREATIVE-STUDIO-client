@@ -1,11 +1,23 @@
 // src/layout/Sidebar.jsx
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useLocation, Link } from "react-router-dom";
 
 const Sidebar = ({ onCloseSidebar }) => {
   const { user, admin, loading, isAuthenticated } = useAuth();
   const location = useLocation();
+  // Initialize expanded state based on current route
+  const isOnProductsRoute = location.pathname.startsWith('/admin/products');
+  const [expandedItems, setExpandedItems] = useState({
+    products: isOnProductsRoute,
+  });
+
+  // Auto-expand parent if child route is active
+  useEffect(() => {
+    if (isOnProductsRoute && !expandedItems.products) {
+      setExpandedItems(prev => ({ ...prev, products: true }));
+    }
+  }, [location.pathname, isOnProductsRoute]);
   
   // Check if user is admin - STATIC CHECK (no DB lookup needed)
   // If we're authenticated and on admin routes, assume admin until proven otherwise
@@ -44,7 +56,15 @@ const Sidebar = ({ onCloseSidebar }) => {
     closeSidebarOnMobile();
   };
 
-  // Admin menu items
+  // Toggle expanded state for nested items
+  const toggleExpanded = (itemKey) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [itemKey]: !prev[itemKey]
+    }));
+  };
+
+  // Admin menu items with nested structure
   const adminMenuItems = [
     {
       heading: "Core",
@@ -63,6 +83,19 @@ const Sidebar = ({ onCloseSidebar }) => {
           icon: "fas fa-box",
           label: "Products",
           href: "/admin/products",
+          hasChildren: true,
+          children: [
+            {
+              icon: "fas fa-list",
+              label: "All Products",
+              href: "/admin/products",
+            },
+            {
+              icon: "fas fa-tags",
+              label: "Product Categories",
+              href: "/admin/products/categories",
+            },
+          ],
         },
       ],
     },
@@ -87,7 +120,56 @@ const Sidebar = ({ onCloseSidebar }) => {
     <React.Fragment key={index}>
       <div className="sb-sidenav-menu-heading">{section.heading}</div>
       {section.items.map((item, itemIndex) => {
-        const isActive = isActiveLink(item.href);
+        const isActive = isActiveLink(item.href) || (item.children && item.children.some(child => isActiveLink(child.href)));
+        const isExpanded = expandedItems[item.label.toLowerCase().replace(/\s+/g, '')] || false;
+        const itemKey = item.label.toLowerCase().replace(/\s+/g, '');
+
+        if (item.hasChildren && item.children) {
+          return (
+            <React.Fragment key={itemIndex}>
+              <a
+                className={`nav-link ${isActive ? "active" : ""}`}
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  toggleExpanded(itemKey);
+                }}
+              >
+                <div className="sb-nav-link-icon">
+                  <i className={item.icon}></i>
+                </div>
+                {item.label}
+                <div className={`sb-sidenav-collapse-arrow ms-auto ${isExpanded ? 'expanded' : ''}`}>
+                  <i className="fas fa-chevron-right small"></i>
+                </div>
+              </a>
+              <div className={`sb-sidenav-menu-nested ${isExpanded ? 'show' : ''}`}>
+                {item.children.map((child, childIndex) => {
+                  const isChildActive = isActiveLink(child.href);
+                  return (
+                      <Link
+                        key={childIndex}
+                        className={`nav-link ${isChildActive ? "active" : ""}`}
+                        to={child.href}
+                        onClick={handleLinkClick}
+                      >
+                        <div className="sb-nav-link-icon">
+                          <i className={child.icon}></i>
+                        </div>
+                        {child.label}
+                        {isChildActive && (
+                          <span className="position-absolute top-50 end-0 translate-middle-y me-3">
+                            <i className="fas fa-chevron-right small"></i>
+                          </span>
+                        )}
+                      </Link>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          );
+        }
+
         return (
           <Link
             key={itemIndex}

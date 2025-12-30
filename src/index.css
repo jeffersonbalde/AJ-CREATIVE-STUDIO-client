@@ -322,7 +322,7 @@ label {
   color: var(--sidebar-text) !important;
   padding: 0.85rem 1.5rem;
   border-left: 4px solid transparent;
-  transition: all 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
   margin: 0;
   display: flex;
@@ -330,7 +330,8 @@ label {
   text-decoration: none;
   border-radius: 0 8px 8px 0;
   position: relative;
-  box-sizing: border-box; /* Ensure padding doesn't cause overflow */
+  box-sizing: border-box;
+  font-size: 0.9rem;
 }
 
 .sb-sidenav .nav-link:hover {
@@ -367,30 +368,148 @@ label {
 .sb-sidenav-collapse-arrow {
   color: rgba(245, 245, 245, 0.7) !important;
   margin-left: auto;
-  font-size: 0.875rem;
-  transition: transform 0.3s ease;
-  flex-shrink: 0; /* Prevent arrow from shrinking */
+  font-size: 0.75rem;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
-/* Collapsed menu items - Fixed to prevent overflow */
+.sb-sidenav .nav-link[href="#"]:hover .sb-sidenav-collapse-arrow {
+  color: rgba(245, 245, 245, 0.9) !important;
+}
+
+/* Collapsed menu items with smooth animation */
 .sb-sidenav-menu-nested {
   margin: 0;
+  margin-left: 1.5rem;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  border-left: 2px solid rgba(245, 245, 245, 0.1);
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sb-sidenav-menu-nested.show {
+  max-height: 500px;
+  opacity: 1;
   padding: 0.25rem 0;
-  background: rgba(20, 20, 20, 0.5);
-  overflow: hidden; /* Prevent nested overflow */
+  margin-left: 1.5rem;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sb-sidenav-menu-nested .nav-link {
-  padding-left: 3rem;
+  padding: 0.65rem 1.5rem 0.65rem 2rem;
   font-size: 0.875rem;
-  border-left: 2px solid transparent;
-  margin: 0.05rem 0; /* Reduced margin */
-  min-height: auto; /* Remove any fixed height */
+  border-left: 3px solid transparent;
+  border-right: none;
+  margin: 0;
+  min-height: auto;
+  transition: all 0.2s ease;
+  position: relative;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.sb-sidenav-menu-nested .nav-link .sb-nav-link-icon {
+  margin-right: 0.75rem;
+  margin-left: 0;
+  order: 0;
+}
+
+.sb-sidenav-menu-nested .nav-link::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: rgba(245, 245, 245, 0.5);
+  transition: all 0.2s ease;
 }
 
 .sb-sidenav-menu-nested .nav-link:hover {
-  background-color: rgba(212, 160, 23, 0.1); /* Subtle gold hover */
-  border-left-color: var(--accent-light);
+  background-color: rgba(212, 160, 23, 0.15);
+  border-left-color: var(--primary-color);
+  border-right: none;
+  padding-left: 2.5rem;
+  padding-right: 1.5rem;
+}
+
+.sb-sidenav-menu-nested .nav-link:hover::before {
+  background-color: var(--primary-color);
+  width: 6px;
+  height: 6px;
+  left: 1.75rem;
+}
+
+.sb-sidenav-menu-nested .nav-link.active {
+  background: linear-gradient(90deg, rgba(212, 160, 23, 0.2) 0%, rgba(212, 160, 23, 0.05) 100%);
+  border-left-color: var(--primary-color);
+  border-right: none;
+  color: var(--sidebar-text) !important;
+  font-weight: 600;
+  padding-left: 2.5rem;
+  padding-right: 1.5rem;
+}
+
+.sb-sidenav-menu-nested .nav-link.active::before {
+  background-color: var(--primary-color);
+  width: 6px;
+  height: 6px;
+  left: 1.75rem;
+}
+
+.sb-sidenav-menu-nested .nav-link.active .sb-nav-link-icon {
+  color: var(--primary-color) !important;
+}
+
+/* Parent link with children - adjust styling */
+.sb-sidenav .nav-link[href="#"] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sb-sidenav .nav-link[href="#"]:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.sb-sidenav .nav-link[href="#"].active {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  border-left-color: var(--sidebar-text);
+  color: var(--sidebar-text) !important;
+  box-shadow: 0 2px 8px rgba(212, 160, 23, 0.2);
+  font-weight: 600;
+}
+
+/* Smooth chevron rotation */
+.sb-sidenav .nav-link[href="#"] .sb-sidenav-collapse-arrow {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sb-sidenav .nav-link[href="#"] .sb-sidenav-collapse-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.sb-sidenav .nav-link[href="#"] .sb-sidenav-collapse-arrow i {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sb-sidenav .nav-link[href="#"]:hover .sb-sidenav-collapse-arrow i {
+  transform: scale(1.1);
 }
 
 /* Sidebar footer */
@@ -1192,42 +1311,55 @@ body {
   }
 }
 
-/* Modal Portal - Ensure modals appear above topbar and all components */
+/* Modal Portal - Ensure modals appear above topbar but below toasts */
 .modal {
-  z-index: 99998 !important; /* Higher than topbar (z-index: 2050) but below toasts */
+  z-index: 9999 !important; /* Very high - above topbar (1039) but below toasts (100002) */
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .modal-backdrop {
-  z-index: 99997 !important;
+  z-index: 9998 !important; /* Just below modal */
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .modal-dialog {
-  z-index: 99999 !important;
+  z-index: 10000 !important; /* Above modal backdrop */
   position: relative !important;
 }
 
 .modal-content {
-  z-index: 99999 !important;
+  z-index: 10000 !important; /* Above modal backdrop */
   position: relative !important;
 }
 
 /* Ensure modal backdrop animation class also has proper z-index */
 .modal-backdrop-animation {
-  z-index: 99998 !important;
+  z-index: 9999 !important;
 }
 
 .modal-content-animation {
-  z-index: 99999 !important;
+  z-index: 10000 !important;
+}
+
+/* Disable topbar interaction when modal is open - keep original appearance */
+body:has(.modal.show) .sb-topnav,
+body:has(.modal-backdrop-animation) .sb-topnav,
+body.modal-open .sb-topnav {
+  pointer-events: none !important;
+  /* Keep original appearance - no opacity change */
+  z-index: 1039 !important; /* Keep original z-index but make it non-interactive */
 }
 
 /* Stats card styles */
@@ -1268,31 +1400,150 @@ body {
   color: var(--primary-dark) !important;
 }
 
-/* Toast Container - Ensure it appears above topbar and all components */
+/* Toast Container - Ensure it appears above topbar and modals */
 .Toastify__toast-container {
-  z-index: 99999 !important; /* Highest z-index - above everything including topbar (z-index: 2050) */
+  z-index: 100002 !important; /* Higher than modal (z-index: 1040) and SweetAlert (z-index: 100000) */
   position: fixed !important;
 }
 
 .Toastify__toast-container--top-right {
-  z-index: 99999 !important;
+  z-index: 100002 !important;
   top: 70px !important; /* Position below topbar (60px) with small gap */
   right: 1rem !important;
 }
 
 .Toastify__toast {
-  z-index: 99999 !important;
+  z-index: 100002 !important;
   position: relative !important;
+}
+
+/* Specifically target error toasts to ensure they appear above modals - HIGHEST PRIORITY */
+.Toastify__toast--error {
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+.Toastify__toast--error * {
+  z-index: 100002 !important;
+}
+
+.Toastify__toast-container .Toastify__toast--error {
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+/* Ensure error toast container appears above modals */
+.Toastify__toast-container:has(.Toastify__toast--error) {
+  z-index: 100002 !important;
+  position: fixed !important;
+}
+
+/* Most aggressive - target error toasts at any level */
+body .Toastify__toast-container .Toastify__toast--error,
+body > div .Toastify__toast-container .Toastify__toast--error {
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+/* Ensure error toast appears above modal backdrop */
+.modal.show ~ .Toastify__toast-container .Toastify__toast--error,
+.modal.show ~ .Toastify__toast-container,
+body:has(.modal.show) .Toastify__toast-container .Toastify__toast--error {
+  z-index: 100002 !important;
+  position: fixed !important;
+}
+
+/* Specific class for error toasts that should appear above modals */
+.error-toast-above-modal {
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+.error-toast-above-modal * {
+  z-index: 100002 !important;
+}
+
+/* Force toast container to appear above ALL modals */
+body:has(.modal.show) .Toastify__toast-container {
+  z-index: 100002 !important;
+  position: fixed !important;
+}
+
+body:has(.modal.show) .Toastify__toast-container * {
+  z-index: 100002 !important;
 }
 
 /* Ensure toast container wrapper is also on top */
 div[id*="toast-container"] {
-  z-index: 99999 !important;
+  z-index: 100002 !important;
+}
+
+/* Force all toast containers to highest z-index */
+.Toastify__toast-container,
+.Toastify__toast-container--top-right,
+.Toastify__toast-container--top-left,
+.Toastify__toast-container--top-center,
+.Toastify__toast-container--bottom-right,
+.Toastify__toast-container--bottom-left,
+.Toastify__toast-container--bottom-center {
+  z-index: 100002 !important;
+  position: fixed !important;
+}
+
+/* Specific rule for category toast container - HIGHEST PRIORITY */
+div[id="category-toast-container"] {
+  z-index: 100002 !important;
+  position: fixed !important;
 }
 
 /* Override any potential conflicting styles */
 .Toastify__toast-container * {
-  z-index: 99999 !important;
+  z-index: 100001 !important;
+}
+
+/* Ensure category toast container and its children have highest z-index */
+div[id="category-toast-container"],
+div[id="category-toast-container"] *,
+div[id="category-toast-container"] .Toastify__toast,
+div[id="category-toast-container"] .Toastify__toast-container,
+div[id="category-toast-container"] .Toastify__toast-container--top-right {
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+/* Most specific selector for category toast container at body level */
+body > div[id="category-toast-container"],
+body > div[id="category-toast-container"] > div {
+  z-index: 100002 !important;
+  position: fixed !important;
+}
+
+/* Force modal z-index - ensure modals are above topbar but below toasts */
+.modal.show,
+.modal-backdrop-animation {
+  z-index: 9999 !important; /* Very high - above topbar */
+}
+
+.modal.show .modal-dialog,
+.modal.show .modal-content {
+  z-index: 10000 !important; /* Above modal backdrop */
+}
+
+/* Ensure toasts always appear above modals - most important rule */
+body:has(.Toastify__toast-container) .modal.show,
+body:has(.Toastify__toast-container) .modal-backdrop-animation {
+  z-index: 9999 !important; /* Still above topbar, but toasts (100002) will be on top */
+}
+
+body:has(.Toastify__toast-container) .modal.show .modal-dialog,
+body:has(.Toastify__toast-container) .modal.show .modal-content {
+  z-index: 10000 !important;
+}
+
+/* Ensure category toast container wrapper div */
+body > div[id="category-toast-container"] {
+  z-index: 100002 !important;
+  position: fixed !important;
 }
 
 /* SweetAlert2 - Ensure it appears above modals */
@@ -1325,6 +1576,60 @@ div[id*="toast-container"] {
 /* Reduce modal backdrop opacity when SweetAlert is shown */
 body:has(.swal2-container.swal2-shown) .modal.show {
   background-color: rgba(0, 0, 0, 0.3) !important; /* Lighter when SweetAlert is shown */
+}
+
+/* Product List Grid - Shopify Style */
+.col-xl-2-4 {
+  flex: 0 0 auto;
+  width: 20%;
+}
+
+@media (max-width: 1399.98px) {
+  .col-xl-2-4 {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .col-xl-2-4 {
+    width: 33.333333%;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .col-xl-2-4 {
+    width: 50%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .col-xl-2-4 {
+    width: 50%;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .col-xl-2-4 {
+    width: 100%;
+  }
+}
+
+/* Product Card Styles */
+.product-card {
+  border: 1px solid rgba(0, 0, 0, 0.125) !important;
+}
+
+.product-card:hover {
+  border-color: var(--primary-color) !important;
+}
+
+.product-card .product-card-actions {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.product-card:hover .product-card-actions {
+  opacity: 1 !important;
 }
 
 /* Ensure SweetAlert appears above modal content */

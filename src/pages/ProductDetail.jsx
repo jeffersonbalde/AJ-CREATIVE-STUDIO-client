@@ -11,6 +11,7 @@ import shopeePayLogo from '../assets/images/shopeepay-logo.jpg';
 import sevenElevenLogo from '../assets/images/7eleven-logo.png';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
 import { useCart } from '../contexts/CartContext';
+import MarkdownRenderer from '../components/MarkdownRenderer';
 
 // Import all product sample images
 import productImage1 from '../assets/images/digital_product_sample/1.webp';
@@ -673,6 +674,29 @@ const ProductDetail = () => {
 
               {/* Short Description Section */}
               {(() => {
+                // Use custom subtitle if available, otherwise generate one
+                if (product.subtitle) {
+                  return (
+                    <motion.div
+                      style={{ marginBottom: '1.5rem' }}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: false, margin: '-100px' }}
+                      transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <MarkdownRenderer
+                        content={product.subtitle}
+                        style={{
+                          fontSize: '0.95rem',
+                          color: '#333',
+                          lineHeight: 1.6,
+                        }}
+                      />
+                    </motion.div>
+                  );
+                }
+                
+                // Fallback to generated description
                 const shortDesc = generateShortDescription(product);
                 return (
                   <motion.div
@@ -893,6 +917,23 @@ const ProductDetail = () => {
                     question: 'Description',
                     isDescription: true,
                     answer: (() => {
+                      // Use custom description if available, otherwise generate one
+                      if (product.description) {
+                        return (
+                          <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
+                            <MarkdownRenderer
+                              content={product.description}
+                              style={{
+                                fontSize: '0.95rem',
+                                color: '#333',
+                                lineHeight: 1.6,
+                              }}
+                            />
+                          </div>
+                        );
+                      }
+                      
+                      // Fallback to generated description
                       const desc = generateDescription(product);
                       return (
                         <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>

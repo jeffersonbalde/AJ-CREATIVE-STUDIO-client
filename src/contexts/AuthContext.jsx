@@ -7,6 +7,7 @@ export const useAuth = () => {
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 };
 
@@ -26,7 +27,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         // Verify token with backend
         const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiBaseUrl}/api/admin/me`, {
+        const response = await fetch(`${apiBaseUrl}/admin/me`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -36,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
         if (response.ok) {
           const data = await response.json();
-          console.log('AuthContext - /api/admin/me response:', JSON.stringify(data, null, 2));
+          console.log('AuthContext - /admin/me response:', JSON.stringify(data, null, 2));
           console.log('AuthContext - Setting user:', JSON.stringify(data.user, null, 2));
           setUser(data.user);
           setIsAuthenticated(true);
@@ -65,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/api/admin/login`, {
+      const response = await fetch(`${apiBaseUrl}/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +105,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
         // Call backend logout to revoke token
-        await fetch(`${apiBaseUrl}/api/admin/logout`, {
+        await fetch(`${apiBaseUrl}/admin/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,

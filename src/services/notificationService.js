@@ -8,6 +8,7 @@ export const showAlert = {
       title,
       text,
       confirmButtonColor: '#28a745',
+      zIndex: 100000, // Ensure it's above modals
       ...options,
     });
   },
@@ -18,6 +19,7 @@ export const showAlert = {
       title,
       text,
       confirmButtonColor: '#dc3545',
+      zIndex: 100000, // Ensure it's above modals
       ...options,
     });
   },
@@ -28,6 +30,7 @@ export const showAlert = {
       title,
       text,
       confirmButtonColor: '#ffc107',
+      zIndex: 100000, // Ensure it's above modals
       ...options,
     });
   },
@@ -38,6 +41,7 @@ export const showAlert = {
       title,
       text,
       confirmButtonColor: '#17a2b8',
+      zIndex: 100000, // Ensure it's above modals
       ...options,
     });
   },
@@ -50,6 +54,7 @@ export const showAlert = {
       allowEscapeKey: false,
       allowEnterKey: false,
       showConfirmButton: false,
+      zIndex: 100000, // Ensure it's above modals
       didOpen: () => {
         Swal.showLoading();
       },
@@ -65,21 +70,7 @@ export const showAlert = {
       allowEscapeKey: false,
       allowEnterKey: false,
       showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      },
-      ...options,
-    });
-  },
-
-  processing: (title = 'Processing Action', text = 'Please wait while we complete this request...', options = {}) => {
-    return Swal.fire({
-      title,
-      text,
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      allowEnterKey: false,
-      showConfirmButton: false,
+      zIndex: 100000, // Ensure it's above modals
       didOpen: () => {
         Swal.showLoading();
       },
