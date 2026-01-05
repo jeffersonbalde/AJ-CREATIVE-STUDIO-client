@@ -32,6 +32,8 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
   const [removeThumbnail, setRemoveThumbnail] = useState(false);
   const [featureImages, setFeatureImages] = useState([]);
   const [featureImagePreviews, setFeatureImagePreviews] = useState([]);
+  const [removedFeatureImageIndices, setRemovedFeatureImageIndices] = useState([]); // Track removed existing feature images
+  const [originalFeatureImageCount, setOriginalFeatureImageCount] = useState(0); // Track original count for index mapping
   const thumbnailInputRef = useRef(null);
   const featureImagesInputRef = useRef(null);
   
@@ -42,6 +44,37 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
   const fileInputRef = useRef(null);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const fileBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+  const buildAssetUrl = (rawPath) => {
+    if (!rawPath) return null;
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) return rawPath;
+    const cleaned = rawPath.replace(/^\/+/, '');
+    if (cleaned.startsWith('storage/')) return `${fileBaseUrl}/${cleaned}`;
+    if (cleaned.startsWith('public/')) return `${fileBaseUrl}/storage/${cleaned.replace(/^public\//, '')}`;
+    return `${fileBaseUrl}/storage/${cleaned}`;
+  };
+
+  const normalizeFeatureImages = (raw) => {
+    if (!raw) return [];
+    let arr = [];
+    if (Array.isArray(raw)) {
+      arr = raw;
+    } else if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) arr = parsed;
+      } catch (e) {
+        arr = raw.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    return arr
+      .map((img) => {
+        if (img && typeof img === 'object' && img.path) return buildAssetUrl(img.path) || img.path;
+        return buildAssetUrl(img) || img;
+      })
+      .filter(Boolean);
+  };
 
   // Fetch categories from API when modal opens
   useEffect(() => {
@@ -151,7 +184,7 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
       // Set thumbnail preview if product has thumbnail
       if (product.thumbnail_image) {
         setThumbnailPreview({
-          path: product.thumbnail_image,
+          path: buildAssetUrl(product.thumbnail_image) || product.thumbnail_image,
         });
       } else {
         setThumbnailPreview(null);
@@ -160,12 +193,58 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
       setRemoveThumbnail(false);
       
       // Set feature images preview if product has feature images
-      if (product.feature_images && Array.isArray(product.feature_images) && product.feature_images.length > 0) {
-        setFeatureImagePreviews(product.feature_images.map(img => ({ path: img })));
+      // First, get the raw feature_images from the product (before normalization)
+      let rawFeatureImages = [];
+      if (product.feature_images) {
+        if (Array.isArray(product.feature_images)) {
+          rawFeatureImages = product.feature_images;
+        } else if (typeof product.feature_images === 'string') {
+          try {
+            rawFeatureImages = JSON.parse(product.feature_images);
+            if (!Array.isArray(rawFeatureImages)) {
+              rawFeatureImages = [];
+            }
+          } catch (e) {
+            console.error('Error parsing feature_images:', e);
+            rawFeatureImages = [];
+          }
+        }
+      }
+      
+      // Now normalize for display
+      const normalizedFeatures = normalizeFeatureImages(product.feature_images);
+      setOriginalFeatureImageCount(rawFeatureImages.length);
+      
+      console.log('Loading product feature images:');
+      console.log('  Raw feature_images:', rawFeatureImages);
+      console.log('  Normalized features:', normalizedFeatures);
+      
+      if (normalizedFeatures.length > 0) {
+        // Map each normalized feature to its original index in the raw array
+        // We need to match by comparing the image paths
+        setFeatureImagePreviews(normalizedFeatures.map((normalizedImg, normalizedIdx) => {
+          // Try to find the original index by matching paths
+          let originalIdx = normalizedIdx;
+          for (let i = 0; i < rawFeatureImages.length; i++) {
+            const rawImg = rawFeatureImages[i];
+            const rawPath = typeof rawImg === 'string' ? rawImg : (rawImg?.path || rawImg?.url || '');
+            // Check if paths match (accounting for URL building)
+            if (rawPath && normalizedImg) {
+              const rawFileName = rawPath.split('/').pop();
+              const normalizedFileName = normalizedImg.split('/').pop();
+              if (rawFileName === normalizedFileName || normalizedImg.includes(rawPath) || rawPath.includes(normalizedImg.split('/').pop())) {
+                originalIdx = i;
+                break;
+              }
+            }
+          }
+          return { path: normalizedImg, originalIndex: originalIdx };
+        }));
       } else {
         setFeatureImagePreviews([]);
       }
       setFeatureImages([]);
+      setRemovedFeatureImageIndices([]); // Reset removed indices when opening product
     } else {
       const defaultState = {
         title: '',
@@ -412,13 +491,33 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
   const handleRemoveFeatureImage = (index, isPreview) => {
     if (isPreview) {
       // Remove from previews (existing images)
+      // Track the original index of the removed image for backend
+      const preview = featureImagePreviews[index];
+      console.log('Removing feature image at preview index:', index);
+      console.log('Preview data:', preview);
+      if (preview && preview.originalIndex !== undefined) {
+        console.log('Tracking removal of original index:', preview.originalIndex);
+        setRemovedFeatureImageIndices(prev => {
+          // Avoid duplicates
+          if (prev.includes(preview.originalIndex)) {
+            console.log('Index already in removal list, skipping');
+            return prev;
+          }
+          const updated = [...prev, preview.originalIndex];
+          console.log('Updated removal indices:', updated);
+          return updated;
+        });
+      } else {
+        console.warn('Preview does not have originalIndex, cannot track removal');
+      }
       const newPreviews = featureImagePreviews.filter((_, i) => i !== index);
+      // Keep original indices for remaining previews (don't re-index)
       setFeatureImagePreviews(newPreviews);
     } else {
       // Remove from new uploads
       const newImages = featureImages.filter((_, i) => i !== index);
       setFeatureImages(newImages);
-      // Also remove corresponding preview
+      // Also remove corresponding preview (new uploads don't have path)
       const previewIndex = featureImagePreviews.findIndex(p => !p.path);
       if (previewIndex !== -1) {
         const newPreviews = featureImagePreviews.filter((_, i) => i !== previewIndex);
@@ -470,26 +569,45 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
     // Validate thumbnail - REQUIRED
     if (!isEdit && !thumbnailImage && !thumbnailPreview) {
       newErrors.thumbnail = 'Thumbnail image is required';
-    } else if (isEdit && !thumbnailImage && !thumbnailPreview && !product?.thumbnail_image) {
-      newErrors.thumbnail = 'Thumbnail image is required';
+    } else if (isEdit) {
+      // When editing: must have either existing thumbnail OR new thumbnail
+      // If removing thumbnail, must provide a new one
+      const hasExistingThumbnail = product?.thumbnail_image && !removeThumbnail;
+      const hasNewThumbnail = !!thumbnailImage;
+      const hasThumbnailPreview = !!thumbnailPreview && !removeThumbnail;
+      
+      if (removeThumbnail && !hasNewThumbnail) {
+        newErrors.thumbnail = 'You must upload a new thumbnail image if you remove the existing one';
+      } else if (!hasExistingThumbnail && !hasNewThumbnail && !hasThumbnailPreview) {
+        newErrors.thumbnail = 'Thumbnail image is required';
+      }
     }
     
     // Validate file - REQUIRED for digital products
     if (!isEdit && !selectedFile) {
       // New product must have a file
       newErrors.file = 'Product file is required. Please upload an Excel file.';
-    } else if (isEdit && !selectedFile && !filePreview && !product?.file_path) {
-      // Editing existing product without file - only error if product had no file
-      newErrors.file = 'Product file is required. Please upload an Excel file.';
-    } else if (selectedFile) {
-      // Validate file type and size if a file is selected
-      const allowedExtensions = ['.xlsx', '.xls'];
-      const fileExtension = '.' + selectedFile.name.split('.').pop().toLowerCase();
+    } else if (isEdit) {
+      // When editing: must have either existing file OR new file
+      // If removing file, must provide a new one
+      const hasExistingFile = product?.file_path && !removeFile;
+      const hasNewFile = !!selectedFile;
+      const hasFilePreview = !!filePreview && !removeFile;
       
-      if (!allowedExtensions.includes(fileExtension)) {
-        newErrors.file = 'Only Excel files (.xlsx or .xls) are allowed. Please select a valid Excel file.';
-      } else if (selectedFile.size > 10 * 1024 * 1024) {
-        newErrors.file = 'File size must be less than 10MB';
+      if (removeFile && !hasNewFile) {
+        newErrors.file = 'You must upload a new product file if you remove the existing one';
+      } else if (!hasExistingFile && !hasNewFile && !hasFilePreview) {
+        newErrors.file = 'Product file is required. Please upload an Excel file.';
+      } else if (selectedFile) {
+        // Validate file type and size if a file is selected
+        const allowedExtensions = ['.xlsx', '.xls'];
+        const fileExtension = '.' + selectedFile.name.split('.').pop().toLowerCase();
+        
+        if (!allowedExtensions.includes(fileExtension)) {
+          newErrors.file = 'Only Excel files (.xlsx or .xls) are allowed. Please select a valid Excel file.';
+        } else if (selectedFile.size > 10 * 1024 * 1024) {
+          newErrors.file = 'File size must be less than 10MB';
+        }
       }
     }
     
@@ -551,28 +669,50 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
     if (!isEdit && !thumbnailImage && !thumbnailPreview) {
       validationErrors.thumbnail = 'Thumbnail image is required';
       isValid = false;
-    } else if (isEdit && !thumbnailImage && !thumbnailPreview && !product?.thumbnail_image) {
-      validationErrors.thumbnail = 'Thumbnail image is required';
-      isValid = false;
+    } else if (isEdit) {
+      // When editing: must have either existing thumbnail OR new thumbnail
+      // If removing thumbnail, must provide a new one
+      const hasExistingThumbnail = product?.thumbnail_image && !removeThumbnail;
+      const hasNewThumbnail = !!thumbnailImage;
+      const hasThumbnailPreview = !!thumbnailPreview && !removeThumbnail;
+      
+      if (removeThumbnail && !hasNewThumbnail) {
+        validationErrors.thumbnail = 'You must upload a new thumbnail image if you remove the existing one';
+        isValid = false;
+      } else if (!hasExistingThumbnail && !hasNewThumbnail && !hasThumbnailPreview) {
+        validationErrors.thumbnail = 'Thumbnail image is required';
+        isValid = false;
+      }
     }
     
     // Validate file - REQUIRED for digital products
     if (!isEdit && !selectedFile) {
       validationErrors.file = 'Product file is required. Please upload an Excel file.';
       isValid = false;
-    } else if (isEdit && !selectedFile && !filePreview && !product?.file_path) {
-      validationErrors.file = 'Product file is required. Please upload an Excel file.';
-      isValid = false;
-    } else if (selectedFile) {
-      const allowedExtensions = ['.xlsx', '.xls'];
-      const fileExtension = '.' + selectedFile.name.split('.').pop().toLowerCase();
+    } else if (isEdit) {
+      // When editing: must have either existing file OR new file
+      // If removing file, must provide a new one
+      const hasExistingFile = product?.file_path && !removeFile;
+      const hasNewFile = !!selectedFile;
+      const hasFilePreview = !!filePreview && !removeFile;
       
-      if (!allowedExtensions.includes(fileExtension)) {
-        validationErrors.file = 'Only Excel files (.xlsx or .xls) are allowed. Please select a valid Excel file.';
+      if (removeFile && !hasNewFile) {
+        validationErrors.file = 'You must upload a new product file if you remove the existing one';
         isValid = false;
-      } else if (selectedFile.size > 10 * 1024 * 1024) {
-        validationErrors.file = 'File size must be less than 10MB';
+      } else if (!hasExistingFile && !hasNewFile && !hasFilePreview) {
+        validationErrors.file = 'Product file is required. Please upload an Excel file.';
         isValid = false;
+      } else if (selectedFile) {
+        const allowedExtensions = ['.xlsx', '.xls'];
+        const fileExtension = '.' + selectedFile.name.split('.').pop().toLowerCase();
+        
+        if (!allowedExtensions.includes(fileExtension)) {
+          validationErrors.file = 'Only Excel files (.xlsx or .xls) are allowed. Please select a valid Excel file.';
+          isValid = false;
+        } else if (selectedFile.size > 10 * 1024 * 1024) {
+          validationErrors.file = 'File size must be less than 10MB';
+          isValid = false;
+        }
       }
     }
     
@@ -628,15 +768,31 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
         'Please wait while we save the product information...'
       );
 
+      // For file uploads with PUT, Laravel may require POST with _method=PUT
+      // But let's try PUT first and see if it works
+      // Always use FormData when images or files are involved
+      // Use FormData if: new product, file selected/removed, thumbnail selected/removed, feature images selected, or feature images removed
+      const hasImagesOrFiles = !isEdit || selectedFile || removeFile || thumbnailImage || removeThumbnail || featureImages.length > 0 || removedFeatureImageIndices.length > 0;
+      
       const url = isEdit
         ? `${apiBaseUrl}/products/${product.id}`
         : `${apiBaseUrl}/products`;
       
-      const method = isEdit ? 'PUT' : 'POST';
-
-      // Always use FormData when images or files are involved
-      // Use FormData if: new product, file selected/removed, thumbnail selected/removed, or feature images selected
-      const hasImagesOrFiles = !isEdit || selectedFile || removeFile || thumbnailImage || removeThumbnail || featureImages.length > 0;
+      // Use POST with _method=PUT for file uploads if we have images/files
+      // This is more reliable for Laravel file handling
+      const usePostMethod = hasImagesOrFiles && isEdit;
+      const method = usePostMethod ? 'POST' : (isEdit ? 'PUT' : 'POST');
+      
+      // Debug: Log what we're sending
+      console.log('=== PRODUCT UPDATE DEBUG ===');
+      console.log('isEdit:', isEdit);
+      console.log('selectedFile:', !!selectedFile);
+      console.log('removeFile:', removeFile);
+      console.log('thumbnailImage:', !!thumbnailImage);
+      console.log('removeThumbnail:', removeThumbnail);
+      console.log('featureImages.length:', featureImages.length);
+      console.log('removedFeatureImageIndices:', removedFeatureImageIndices);
+      console.log('hasImagesOrFiles:', hasImagesOrFiles);
       
       let requestBody;
       let headers = {
@@ -647,6 +803,12 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
       if (hasImagesOrFiles) {
         // Use FormData for file/image upload or removal
         const formDataToSend = new FormData();
+        
+        // If using POST for PUT update, add _method field for Laravel
+        if (usePostMethod) {
+          formDataToSend.append('_method', 'PUT');
+          console.log('Using POST with _method=PUT for file upload');
+        }
         
         // Debug: Log formData values before sending
         console.log('FormData values before sending:', {
@@ -716,21 +878,45 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
         
         // Handle thumbnail image
         if (thumbnailImage) {
+          console.log('Appending thumbnail_image:', thumbnailImage.name, thumbnailImage.size);
           formDataToSend.append('thumbnail_image', thumbnailImage);
         }
         
         if (removeThumbnail) {
+          console.log('Appending remove_thumbnail flag');
           formDataToSend.append('remove_thumbnail', '1');
         }
         
         // Handle feature images
+        console.log('Appending feature images:', featureImages.length);
         featureImages.forEach((image, index) => {
+          console.log(`  feature_images[${index}]:`, image.name, image.size);
           formDataToSend.append(`feature_images[${index}]`, image);
         });
         
-        // If removing existing feature images, send indices
-        // Note: Backend will need to handle this - for now, we'll send all current previews
-        // and let backend determine which to keep/remove
+        // Send removed feature image indices to backend
+        // Laravel expects remove_feature_images as an array, so we need to send it correctly
+        if (removedFeatureImageIndices.length > 0) {
+          console.log('Appending removed feature image indices:', removedFeatureImageIndices);
+          // Sort indices to ensure correct order
+          const sortedIndices = [...removedFeatureImageIndices].sort((a, b) => a - b);
+          sortedIndices.forEach((index, idx) => {
+            // Send as sequential indexed array: remove_feature_images[0], remove_feature_images[1], etc.
+            // The value is the actual index in the product's feature_images array
+            formDataToSend.append(`remove_feature_images[${idx}]`, index.toString());
+          });
+          console.log('Sent remove_feature_images array:', sortedIndices);
+        }
+        
+        // Debug: Log all FormData entries
+        console.log('FormData entries:');
+        for (let pair of formDataToSend.entries()) {
+          if (pair[1] instanceof File) {
+            console.log(`  ${pair[0]}: [File] ${pair[1].name} (${pair[1].size} bytes)`);
+          } else {
+            console.log(`  ${pair[0]}: ${pair[1]}`);
+          }
+        }
         
         requestBody = formDataToSend;
         // Don't set Content-Type header - browser will set it with boundary for FormData
@@ -757,16 +943,39 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
         headers['Content-Type'] = 'application/json';
       }
 
+      console.log('Sending request to:', url);
+      console.log('Method:', method);
+      console.log('Using FormData:', hasImagesOrFiles);
+      
       const response = await fetch(url, {
         method,
         headers,
         body: requestBody,
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       showAlert.close();
 
       if (response.ok) {
+        // Debug: Log the response to see what the backend returned
+        console.log('=== PRODUCT UPDATE SUCCESS ===');
+        console.log('Full response:', data);
+        if (data.product) {
+          console.log('Updated product ID:', data.product.id);
+          console.log('Updated product thumbnail:', data.product.thumbnail_image);
+          console.log('Updated product feature_images:', data.product.feature_images);
+          console.log('Updated product feature_images type:', typeof data.product.feature_images);
+          console.log('Updated product feature_images is array:', Array.isArray(data.product.feature_images));
+          console.log('Added by user ID:', data.product.added_by_user_id);
+          console.log('Added by user type:', data.product.added_by_user_type);
+          console.log('Added by name:', data.product.added_by_name);
+          console.log('Added by admin:', data.product.added_by_admin);
+          console.log('Added by personnel:', data.product.added_by_personnel);
+        } else {
+          console.warn('Response does not contain product data!');
+        }
         toast.success(
           isEdit ? 'Product updated successfully!' : 'Product created successfully!'
         );
@@ -1373,7 +1582,13 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
                         <input
                           type="text"
                           className="form-control modal-smooth"
-                          value={product.added_by || product.created_by || 'N/A'}
+                          value={
+                            product.added_by_name || 
+                            (product.added_by && (product.added_by.name || product.added_by.username)) ||
+                            product.added_by || 
+                            product.created_by || 
+                            'N/A'
+                          }
                           disabled
                           readOnly
                           style={{ backgroundColor: '#f8f9fa', cursor: 'not-allowed' }}
@@ -1427,7 +1642,7 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
                           On Sale <small className="text-muted">(Shows sale badge and old price)</small>
                         </label>
                       </div>
-                      <div className="form-check">
+                      <div className="form-check mb-2">
                         <input
                           className="form-check-input"
                           type="checkbox"
@@ -1444,6 +1659,7 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
                     </div>
                   </div>
                 </div>
+
               </div>
 
               {/* Footer */}

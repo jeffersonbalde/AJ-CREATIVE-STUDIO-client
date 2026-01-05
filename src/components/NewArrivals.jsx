@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { getProductImage } from '../pages/Products';
 import { useCart } from '../contexts/CartContext';
+import { getProductImage, formatCurrency } from '../utils/productImageUtils';
 
 // Helper to match slug style used in Products.jsx
 const createSlug = (title) => {
@@ -16,58 +16,61 @@ const createSlug = (title) => {
     .trim();
 };
 
-const products = [
-  {
-    id: 1,
-    title: 'The Ultimate 12 Week Habit Tracker - V1',
-    oldPrice: '₱501.90',
-    newPrice: '₱413.12',
-    imageType: 'habit-tracker',
-    // Match solid green palette from Products.jsx
-    color: '#4CAF50',
-    accentColor: '#2E7D32',
-  },
-  {
-    id: 2,
-    title: 'Budget Spreadsheet Template',
-    oldPrice: '₱450.00',
-    newPrice: '₱380.00',
-    imageType: 'budget',
-    // Match solid blue palette from Products.jsx
-    color: '#2196F3',
-    accentColor: '#1565C0',
-  },
-  {
-    id: 3,
-    title: 'Monthly Planner Template',
-    oldPrice: '₱520.00',
-    newPrice: '₱445.00',
-    imageType: 'planner',
-    // Reuse solid green palette
-    color: '#4CAF50',
-    accentColor: '#2E7D32',
-  },
-  {
-    id: 4,
-    title: 'Productivity Dashboard',
-    oldPrice: '₱480.00',
-    newPrice: '₱410.00',
-    imageType: 'productivity',
-    // Match solid yellow/orange palette from Products.jsx
-    color: '#FFC107',
-    accentColor: '#F57C00',
-  },
-];
+const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const NewArrivals = () => {
   const { addToCart, setCartOpen } = useCart();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [scrollDirection, setScrollDirection] = useState('down');
   const [visibleItems, setVisibleItems] = useState({});
+  const [imageLoading, setImageLoading] = useState({});
   const lastScrollY = useRef(0);
   const sectionRef = useRef(null);
   const itemRefs = useRef({});
 
+  // Fetch new arrivals from API
   useEffect(() => {
+    const fetchNewArrivals = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${apiBaseUrl}/products/new-arrivals/list`, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.products) {
+            // Limit to 4 products for display
+            const limitedProducts = data.products.slice(0, 4);
+            setProducts(limitedProducts);
+            
+            // Initialize image loading states
+            const initialLoadingStates = {};
+            limitedProducts.forEach((product) => {
+              const imageUrl = getProductImage(product);
+              if (imageUrl) {
+                initialLoadingStates[product.id] = true;
+              }
+            });
+            setImageLoading(initialLoadingStates);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching new arrivals:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNewArrivals();
+  }, []);
+
+  useEffect(() => {
+    if (products.length === 0) return;
+
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       const direction = currentScrollY > lastScrollY.current ? 'down' : 'up';
@@ -93,8 +96,8 @@ const NewArrivals = () => {
       },
     );
 
-    const observeItems = () => {
-      Object.values(itemRefs.current).forEach((ref) => {
+    const observeItems = () => {  
+      Object.values(itemRefs.current).forEach((ref) => {  
         if (ref) observer.observe(ref);
       });
     };
@@ -145,21 +148,32 @@ const NewArrivals = () => {
           Our New Arrivals
         </motion.h2>
 
-        <motion.div
-          className="new-arrivals-grid"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: false, margin: '-100px' }}
-          transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
-          style={{
-            display: 'flex',
-            gap: '1.5rem',
-            flexWrap: 'wrap',
-            alignItems: 'stretch',
-          }}
-        >
-          <AnimatePresence>
-            {products.map((product, index) => (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        ) : products.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
+            <p>No new arrivals available at the moment.</p>
+          </div>
+        ) : (
+          <motion.div
+            className="new-arrivals-grid"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              display: 'flex',
+              gap: '1.5rem',
+              flexWrap: 'wrap',
+              alignItems: 'stretch',
+            }}
+          >
+            <AnimatePresence>
+              {products.map((product, index) => (
               <motion.div
                 key={product.id}
                 id={`product-item-${index}`}
@@ -213,11 +227,11 @@ const NewArrivals = () => {
                     flex: 1,
                   }}
                 >
-                  {/* Header banner (exactly like Products.jsx) */}
+                  {/* Header banner */}
                   <div
                     className="green-header-banner"
                     style={{
-                      backgroundColor: product.color || '#4CAF50',
+                      backgroundColor: '#4CAF50',
                       padding: '0.75rem',
                       color: '#FFFFFF',
                     }}
@@ -237,16 +251,17 @@ const NewArrivals = () => {
                     </div>
                   </div>
 
-                  {/* Image (exact same structure as Products.jsx) */}
+                  {/* Image */}
                   <div
                     style={{
                       position: 'relative',
                       width: '100%',
                       aspectRatio: '4/3',
                       backgroundColor: '#F8F8F8',
+                      overflow: 'hidden',
                     }}
                   >
-                    {product.onSale && (
+                    {product.on_sale && (
                       <div
                         style={{
                           position: 'absolute',
@@ -264,18 +279,53 @@ const NewArrivals = () => {
                         Sale
                       </div>
                     )}
+                    
+                    {/* Skeleton Loading State */}
+                    {imageLoading[product.id] && (
+                      <div
+                        className="skeleton-shimmer"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #E0E0E0 25%, #F5F5F5 50%, #E0E0E0 75%)',
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmer 1.5s ease-in-out infinite',
+                          zIndex: 1,
+                        }}
+                      />
+                    )}
+                    
                     <img
-                      src={getProductImage(
-                        product.imageType,
-                        product.color,
-                        product.accentColor,
-                      )}
+                      src={getProductImage(product)}
                       alt={product.title}
                       style={{
                         width: '100%',
                         height: '100%',
                         objectFit: 'cover',
                         display: 'block',
+                        opacity: imageLoading[product.id] ? 0 : 1,
+                        transition: 'opacity 0.3s ease-in-out',
+                      }}
+                      onLoad={() => {
+                        setImageLoading((prev) => ({
+                          ...prev,
+                          [product.id]: false,
+                        }));
+                      }}
+                      onLoadStart={() => {
+                        setImageLoading((prev) => ({
+                          ...prev,
+                          [product.id]: true,
+                        }));
+                      }}
+                      onError={() => {
+                        setImageLoading((prev) => ({
+                          ...prev,
+                          [product.id]: false,
+                        }));
                       }}
                     />
                   </div>
@@ -345,15 +395,17 @@ const NewArrivals = () => {
                         gap: '0.5rem',
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: '0.9rem',
-                          color: '#999',
-                          textDecoration: 'line-through',
-                        }}
-                      >
-                        {product.oldPrice}
-                      </span>
+                      {product.on_sale && product.old_price && (
+                        <span
+                          style={{
+                            fontSize: '0.9rem',
+                            color: '#999',
+                            textDecoration: 'line-through',
+                          }}
+                        >
+                          {formatCurrency(product.old_price)}
+                        </span>
+                      )}
                       <span
                         style={{
                           fontSize: '1rem',
@@ -361,7 +413,7 @@ const NewArrivals = () => {
                           color: '#000',
                         }}
                       >
-                        {product.newPrice}
+                        {formatCurrency(product.price)}
                       </span>
                     </div>
 
@@ -386,19 +438,12 @@ const NewArrivals = () => {
                         e.preventDefault();
                         e.stopPropagation();
                         
-                        // Convert price from string (₱413.12) to number (413.12)
-                        const priceNumber = parseFloat(product.newPrice.replace('₱', '').replace(/,/g, ''));
-                        
                         // Add product to cart
                         const productToAdd = {
                           id: product.id,
                           title: product.title,
-                          price: priceNumber,
-                          image: getProductImage(
-                            product.imageType,
-                            product.color,
-                            product.accentColor,
-                          ),
+                          price: parseFloat(product.price),
+                          image: getProductImage(product),
                         };
                         
                         addToCart(productToAdd);
@@ -411,9 +456,10 @@ const NewArrivals = () => {
                   </div>
                 </Link>
               </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
       </div>
     </section>
   );

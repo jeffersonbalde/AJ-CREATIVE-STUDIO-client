@@ -1090,6 +1090,26 @@ body {
   }
 }
 
+/* Skeleton loading shimmer animation */
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Shimmer animation for image skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 .skeleton {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
@@ -1385,7 +1405,7 @@ body.modal-open .sb-topnav {
 .clear-search-btn:hover:not(:disabled) {
   background-color: var(--primary-light) !important;
   border-color: var(--primary-color) !important;
-  color: var(--primary-dark) !important;
+  color: #fff !important; /* ensure the X icon turns white on hover */
 }
 
 .clear-search-main-btn {
@@ -1620,7 +1640,7 @@ body:has(.swal2-container.swal2-shown) .modal.show {
 }
 
 .product-card:hover {
-  border-color: var(--primary-color) !important;
+  border-color: rgba(0, 0, 0, 0.125) !important; /* keep neutral border on hover */
 }
 
 .product-card .product-card-actions {
@@ -1637,6 +1657,145 @@ body:has(.swal2-container.swal2-shown) .modal.show {
   z-index: 100000 !important;
 }
 
+/* Product detail drawer */
+.product-detail-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1050;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.product-detail-drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.product-detail-drawer {
+  width: min(520px, 92vw);
+  height: 100%;
+  border-radius: 0;
+  border: none;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+  background: var(--background-white);
+  padding: 20px;
+}
+
+.product-detail-drawer.open {
+  transform: translateX(0);
+}
+
+.product-detail-drawer .detail-tile {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Detail hero nav buttons */
+.hero-nav-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.48);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(3px);
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.hero-nav-btn:hover {
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+}
+
+.hero-nav-indicator {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+}
+
 .swal2-container.swal2-shown .swal2-popup {
   z-index: 100001 !important;
+}
+
+/* Image Lightbox Modal - Ensure it's above everything including topbar and sidebar */
+.image-lightbox-overlay {
+  z-index: 999999 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+/* Image Lightbox Container - More margin on large screens */
+.image-lightbox-container {
+  max-width: min(calc(100vw - 8rem), 1000px) !important;
+  max-height: calc(100vh - 6rem) !important;
+  aspect-ratio: auto !important;
+}
+
+.image-lightbox-container > div {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+.image-lightbox-container img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+}
+
+@media (min-width: 1200px) {
+  .image-lightbox-container {
+    max-width: min(calc(100vw - 12rem), 1000px) !important;
+    max-height: calc(100vh - 8rem) !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  .image-lightbox-container {
+    max-width: min(calc(100vw - 16rem), 1000px) !important;
+    max-height: calc(100vh - 10rem) !important;
+  }
+}
+
+/* Mobile-specific overrides for Image Lightbox */
+@media (max-width: 768px) {
+  .image-lightbox-container {
+    max-width: 100vw !important;
+    max-height: 98vh !important;
+    width: 100vw !important;
+  }
+  
+  .image-lightbox-container > div {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+  
+  .image-lightbox-container img {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
 }

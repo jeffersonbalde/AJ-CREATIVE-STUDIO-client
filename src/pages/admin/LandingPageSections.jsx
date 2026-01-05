@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import Portal from "../../components/Portal";
@@ -10,23 +9,18 @@ import { useAuth } from "../../contexts/AuthContext";
 import { showAlert } from "../../services/notificationService";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import Swal from 'sweetalert2';
-import { FaTags } from 'react-icons/fa';
+import LandingPageSectionFormModal from './LandingPageSectionFormModal';
 
-const DEFAULT_CATEGORY_FORM = {
-  name: "",
-  description: "",
-};
-
-const ProductCategories = () => {
+const LandingPageSections = () => {
   const { token } = useAuth();
-  const [allCategories, setAllCategories] = useState([]); // Store all categories
-  const [categories, setCategories] = useState([]); // Displayed categories (filtered + paginated)
+  const [allSections, setAllSections] = useState([]); // Store all sections
+  const [sections, setSections] = useState([]); // Displayed sections (filtered + paginated)
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [actionLock, setActionLock] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState(''); // 'active', 'inactive', or '' for all
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [paginationMeta, setPaginationMeta] = useState({
@@ -37,26 +31,26 @@ const ProductCategories = () => {
     to: 0,
   });
   const [stats, setStats] = useState({
-    totalCategories: 0,
-    totalItems: 0,
+    totalSections: 0,
+    activeSections: 0,
   });
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [savingCategory, setSavingCategory] = useState(false);
+  const [collections, setCollections] = useState([]);
+  const [showSectionForm, setShowSectionForm] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-  // Fetch all categories once on initial load
-  const fetchAllCategories = useCallback(async () => {
+  // Fetch all sections once on initial load
+  const fetchAllSections = useCallback(async () => {
     setLoading(true);
     setInitialLoading(true);
     try {
-      // Fetch all categories with a large per_page to get everything
-      const response = await fetch(`${apiBaseUrl}/product-categories?per_page=1000`, {
+      const response = await fetch(`${apiBaseUrl}/landing-page-sections`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        cache: 'no-cache',
       });
 
       let data;
@@ -80,32 +74,40 @@ const ProductCategories = () => {
         throw new Error(errorMessage);
       }
 
-      if (data.success && data.categories) {
-        setAllCategories(data.categories);
+      if (data.success && data.sections) {
+        // Sort by display_order
+        const sortedSections = [...data.sections].sort((a, b) => {
+          if (a.display_order !== b.display_order) {
+            return a.display_order - b.display_order;
+          }
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
         
-        // Calculate stats from all categories
-        const totalItems = data.categories.reduce((sum, cat) => sum + (cat.items_count || 0), 0);
+        setAllSections(sortedSections);
+        
+        // Calculate stats from all sections
+        const activeSections = sortedSections.filter(s => s.is_active === true).length;
         setStats({
-          totalCategories: data.pagination?.total || data.categories.length || 0,
-          totalItems: totalItems,
+          totalSections: sortedSections.length,
+          activeSections: activeSections,
         });
       } else {
-        setAllCategories([]);
+        setAllSections([]);
         setStats({
-          totalCategories: 0,
-          totalItems: 0,
+          totalSections: 0,
+          activeSections: 0,
         });
       }
     } catch (error) {
-      console.error("Error fetching categories:", error);
+      console.error("Error fetching sections:", error);
       showAlert.error(
-        "Categories Error",
-        error.message || "Unable to load product categories"
+        "Sections Error",
+        error.message || "Unable to load landing page sections"
       );
-      setAllCategories([]);
+      setAllSections([]);
       setStats({
-        totalCategories: 0,
-        totalItems: 0,
+        totalSections: 0,
+        activeSections: 0,
       });
     } finally {
       setLoading(false);
@@ -113,18 +115,26 @@ const ProductCategories = () => {
     }
   }, [token, apiBaseUrl]);
 
-  // Filter and paginate categories client-side
-  const filterAndPaginateCategories = useCallback(() => {
-    let filtered = [...allCategories];
+  // Filter and paginate sections client-side
+  const filterAndPaginateSections = useCallback(() => {
+    let filtered = [...allSections];
 
     // Apply search filter
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter((category) => {
-        const nameMatch = category.name?.toLowerCase().includes(search);
-        const descMatch = category.description?.toLowerCase().includes(search);
-        return nameMatch || descMatch;
+      filtered = filtered.filter((section) => {
+        const nameMatch = section.name?.toLowerCase().includes(search);
+        const titleMatch = section.title?.toLowerCase().includes(search);
+        const descMatch = section.description?.toLowerCase().includes(search);
+        return nameMatch || titleMatch || descMatch;
       });
+    }
+
+    // Status filter
+    if (statusFilter === 'active') {
+      filtered = filtered.filter(section => section.is_active === true);
+    } else if (statusFilter === 'inactive') {
+      filtered = filtered.filter(section => section.is_active === false);
     }
 
     // Calculate pagination
@@ -134,8 +144,8 @@ const ProductCategories = () => {
     const endIndex = startIndex + itemsPerPage;
     const paginated = filtered.slice(startIndex, endIndex);
 
-    // Update displayed categories
-    setCategories(paginated);
+    // Update displayed sections
+    setSections(paginated);
     
     // Update pagination meta
     setPaginationMeta({
@@ -145,30 +155,49 @@ const ProductCategories = () => {
       from: total > 0 ? startIndex + 1 : 0,
       to: Math.min(endIndex, total),
     });
-  }, [allCategories, searchTerm, currentPage, itemsPerPage]);
+  }, [allSections, searchTerm, statusFilter, currentPage, itemsPerPage]);
 
-  // Fetch all categories on mount
+  // Fetch all sections on mount
   useEffect(() => {
-    fetchAllCategories();
-  }, [fetchAllCategories]);
+    fetchAllSections();
+    fetchCollections();
+  }, [fetchAllSections]);
 
-  // Filter and paginate when search term, page, or items per page changes
+  // Filter and paginate when search term, status filter, page, or items per page changes
   useEffect(() => {
     if (!initialLoading) {
-      filterAndPaginateCategories();
+      filterAndPaginateSections();
     }
-  }, [filterAndPaginateCategories, initialLoading]);
+  }, [filterAndPaginateSections, initialLoading]);
 
-  // Ensure toast container has highest z-index above modals - AGGRESSIVE
+  const fetchCollections = async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/product-collections/list`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.collections) {
+          setCollections(data.collections);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  };
+
+  // Ensure toast container has highest z-index above modals
   useEffect(() => {
     const setToastZIndex = () => {
-      // Find all toast containers (react-toastify creates them dynamically)
       const toastContainers = document.querySelectorAll('.Toastify__toast-container');
       toastContainers.forEach(container => {
         if (container instanceof HTMLElement) {
           container.style.setProperty('z-index', '100002', 'important');
           container.style.setProperty('position', 'fixed', 'important');
-          // Also set for any child elements
           const childElements = container.querySelectorAll('*');
           childElements.forEach(el => {
             if (el instanceof HTMLElement) {
@@ -178,12 +207,10 @@ const ProductCategories = () => {
         }
       });
       
-      // Also set for individual toasts - ESPECIALLY ERROR TOASTS
       const toasts = document.querySelectorAll('.Toastify__toast');
       toasts.forEach(toast => {
         if (toast instanceof HTMLElement) {
           toast.style.setProperty('z-index', '100002', 'important');
-          // Extra emphasis on error toasts
           if (toast.classList.contains('Toastify__toast--error')) {
             toast.style.setProperty('z-index', '100002', 'important');
             toast.style.setProperty('position', 'relative', 'important');
@@ -192,10 +219,8 @@ const ProductCategories = () => {
       });
     };
 
-    // Set immediately
     setToastZIndex();
     
-    // Set multiple times to catch dynamically created elements
     const timeouts = [
       setTimeout(setToastZIndex, 10),
       setTimeout(setToastZIndex, 50),
@@ -204,7 +229,6 @@ const ProductCategories = () => {
       setTimeout(setToastZIndex, 500),
     ];
     
-    // Watch for changes - more aggressive
     const observer = new MutationObserver(() => {
       setToastZIndex();
     });
@@ -222,17 +246,17 @@ const ProductCategories = () => {
     setCurrentPage(1); // Reset to first page when searching
   };
 
-  const handleAddCategory = () => {
-    setEditingCategory(null);
-    setShowFormModal(true);
+  const handleNewSection = () => {
+    setEditingSection(null);
+    setShowSectionForm(true);
   };
 
-  const handleEditCategory = (category) => {
-    setEditingCategory(category);
-    setShowFormModal(true);
+  const handleEditSection = (section) => {
+    setEditingSection(section);
+    setShowSectionForm(true);
   };
 
-  const handleDeleteCategory = async (category) => {
+  const handleDeleteSection = async (section) => {
     if (actionLock) {
       toast.warning("Please wait until the current action completes", {
         style: { zIndex: 100002 }
@@ -241,8 +265,8 @@ const ProductCategories = () => {
     }
 
     const confirmation = await showAlert.confirm(
-      "Delete Category",
-      `Deleting "${category.name}" will remove it from the combobox. Continue?`,
+      "Delete Section",
+      `Deleting "${section.title}" will remove it from the landing page. Continue?`,
       "Delete",
       "Cancel"
     );
@@ -250,11 +274,11 @@ const ProductCategories = () => {
     if (!confirmation.isConfirmed) return;
 
     setActionLock(true);
-    setActionLoading(category.id);
-    showAlert.processing("Deleting Category", "Removing category...");
+    setActionLoading(section.id);
+    showAlert.processing("Deleting Section", "Removing section...");
 
     try {
-      const response = await fetch(`${apiBaseUrl}/product-categories/${category.id}`, {
+      const response = await fetch(`${apiBaseUrl}/landing-page-sections/${section.id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -265,30 +289,28 @@ const ProductCategories = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to delete category");
+        throw new Error(data.message || "Failed to delete section");
       }
 
       showAlert.close();
-      toast.success("Category deleted successfully!", {
+      toast.success("Section deleted successfully!", {
         style: { zIndex: 100002 }
       });
-      // Remove from allCategories and update stats
-      setAllCategories(prev => {
-        const updatedCategories = prev.filter(cat => cat.id !== category.id);
+      // Remove from allSections and update stats
+      setAllSections(prev => {
+        const updatedSections = prev.filter(sec => sec.id !== section.id);
         
-        // Recalculate stats from updated categories
-        const totalItems = updatedCategories.reduce((sum, cat) => sum + (cat.items_count || 0), 0);
+        const activeSections = updatedSections.filter(s => s.is_active === true).length;
         setStats({
-          totalCategories: updatedCategories.length,
-          totalItems: totalItems,
+          totalSections: updatedSections.length,
+          activeSections: activeSections,
         });
         
-        return updatedCategories;
+        return updatedSections;
       });
     } catch (error) {
-      console.error("Delete category error:", error);
+      console.error("Delete section error:", error);
       showAlert.close();
-      // Force z-index before showing error toast
       requestAnimationFrame(() => {
         const containers = document.querySelectorAll('.Toastify__toast-container');
         containers.forEach(container => {
@@ -298,11 +320,10 @@ const ProductCategories = () => {
           }
         });
         
-        toast.error(error.message || "Unable to delete category", {
+        toast.error(error.message || "Unable to delete section", {
           style: { zIndex: 100002 }
         });
         
-        // Force again after toast is created
         requestAnimationFrame(() => {
           const containers = document.querySelectorAll('.Toastify__toast-container');
           containers.forEach(container => {
@@ -329,36 +350,157 @@ const ProductCategories = () => {
   const isActionDisabled = (id = null) =>
     actionLock || (actionLoading && actionLoading !== id);
 
-  const handleSaveCategory = () => {
-    setShowFormModal(false);
-    setEditingCategory(null);
-    // Refresh all categories after save
-    fetchAllCategories();
+  const handleToggleActive = async (section) => {
+    if (actionLock || isActionDisabled(section.id)) return;
+
+    try {
+      setActionLoading(section.id);
+      setActionLock(true);
+
+      const response = await fetch(`${apiBaseUrl}/landing-page-sections/${section.id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          is_active: !section.is_active,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`Section ${!section.is_active ? 'activated' : 'deactivated'} successfully`, {
+          style: { zIndex: 100002 }
+        });
+        // Update in allSections and recalculate stats
+        setAllSections(prev => {
+          const updated = prev.map(sec => 
+            sec.id === section.id ? { ...sec, is_active: !sec.is_active } : sec
+          );
+          const activeSections = updated.filter(s => s.is_active === true).length;
+          setStats({
+            totalSections: updated.length,
+            activeSections: activeSections,
+          });
+          return updated;
+        });
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to update section', {
+          style: { zIndex: 100002 }
+        });
+      }
+    } catch (error) {
+      console.error('Error updating section:', error);
+      toast.error(`Error updating section: ${error.message}`, {
+        style: { zIndex: 100002 }
+      });
+    } finally {
+      setActionLoading(null);
+      setActionLock(false);
+    }
+  };
+
+  const handleMoveUp = async (section, index) => {
+    if (index === 0 || actionLock) return;
+
+    const newOrder = [...allSections];
+    const actualIndex = allSections.findIndex(s => s.id === section.id);
+    if (actualIndex === 0) return;
+    
+    [newOrder[actualIndex], newOrder[actualIndex - 1]] = [newOrder[actualIndex - 1], newOrder[actualIndex]];
+
+    await updateOrder(newOrder);
+  };
+
+  const handleMoveDown = async (section, index) => {
+    if (index === allSections.length - 1 || actionLock) return;
+
+    const newOrder = [...allSections];
+    const actualIndex = allSections.findIndex(s => s.id === section.id);
+    if (actualIndex === allSections.length - 1) return;
+    
+    [newOrder[actualIndex], newOrder[actualIndex + 1]] = [newOrder[actualIndex + 1], newOrder[actualIndex]];
+
+    await updateOrder(newOrder);
+  };
+
+  const updateOrder = async (orderedSections) => {
+    try {
+      setActionLock(true);
+
+      const sectionsData = orderedSections.map((section, index) => ({
+        id: section.id,
+        display_order: index + 1,
+      }));
+
+      const response = await fetch(`${apiBaseUrl}/landing-page-sections/order/update`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ sections: sectionsData }),
+      });
+
+      if (response.ok) {
+        toast.success('Section order updated successfully', {
+          style: { zIndex: 100002 }
+        });
+        fetchAllSections();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to update order', {
+          style: { zIndex: 100002 }
+        });
+      }
+    } catch (error) {
+      console.error('Error updating order:', error);
+      toast.error(`Error updating order: ${error.message}`, {
+        style: { zIndex: 100002 }
+      });
+    } finally {
+      setActionLock(false);
+    }
+  };
+
+  const handleSave = () => {
+    setShowSectionForm(false);
+    setEditingSection(null);
+    // Refresh all sections after save
+    fetchAllSections();
   };
 
   const startIndex = useMemo(() => {
     return (paginationMeta.current_page - 1) * itemsPerPage;
   }, [paginationMeta, itemsPerPage]);
 
+  const getSourceLabel = (section) => {
+    const collection = collections.find(c => c.slug === section.source_value);
+    return collection ? collection.name : section.source_value;
+  };
+
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 inventory-categories-container fadeIn">
+    <div className="container-fluid px-3 pt-0 pb-2 landing-page-sections-container fadeIn">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
             style={{ color: "var(--text-primary)" }}
           >
-            <FaTags className="me-2" />
-            Product Categories
+            <i className="fas fa-layer-group me-2"></i>
+            Landing Page Sections
           </h1>
           <p className="mb-0 small" style={{ color: "var(--text-muted)" }}>
-            Organize and manage your product categories for better inventory control.
+            Manage sections displayed on the landing page
           </p>
         </div>
         <div className="d-flex align-items-center gap-2 flex-wrap">
           <button
             className="btn btn-sm btn-primary text-white"
-            onClick={handleAddCategory}
+            onClick={handleNewSection}
             disabled={isActionDisabled()}
             style={{
               transition: "all 0.2s ease-in-out",
@@ -377,11 +519,11 @@ const ProductCategories = () => {
             }}
           >
             <i className="fas fa-plus me-1" />
-            Add Category
+            New Section
           </button>
           <button
             className="btn btn-sm"
-            onClick={fetchAllCategories}
+            onClick={fetchAllSections}
             disabled={loading || isActionDisabled()}
             style={{
               transition: "all 0.2s ease-in-out",
@@ -411,7 +553,7 @@ const ProductCategories = () => {
       </div>
 
       <div className="row g-3 mb-4">
-        {[stats.totalCategories, stats.totalItems].map((value, idx) => (
+        {[stats.totalSections, stats.activeSections].map((value, idx) => (
           <div className="col-6 col-md-3" key={idx}>
             {initialLoading ? (
               <StatsCardSkeleton />
@@ -435,7 +577,7 @@ const ProductCategories = () => {
                               : "var(--accent-color)",
                         }}
                       >
-                        {idx === 0 ? "Total Categories" : "Items Tagged"}
+                        {idx === 0 ? "Total Sections" : "Active Sections"}
                       </div>
                       <div
                         className="h4 mb-0 fw-bold"
@@ -452,7 +594,7 @@ const ProductCategories = () => {
                     <div className="col-auto">
                       <i
                         className={`fas ${
-                          idx === 0 ? "fa-layer-group" : "fa-boxes-stacked"
+                          idx === 0 ? "fa-layer-group" : "fa-check-circle"
                         } fa-2x`}
                         style={{
                           color:
@@ -477,12 +619,12 @@ const ProductCategories = () => {
       >
         <div className="card-body p-3">
           <div className="row g-2 align-items-start">
-            <div className="col-md-6">
+            <div className="col-md-4">
               <label
                 className="form-label small fw-semibold mb-1"
                 style={{ color: "var(--text-muted)" }}
               >
-                Search Categories
+                Search Sections
               </label>
               <div className="input-group input-group-sm">
                 <span
@@ -498,7 +640,7 @@ const ProductCategories = () => {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search by name or description..."
+                  placeholder="Search by name, title or description..."
                   value={searchTerm}
                   onChange={handleSearchChange}
                   style={{
@@ -544,7 +686,32 @@ const ProductCategories = () => {
                 )}
               </div>
             </div>
-            <div className="col-md-6">
+            <div className="col-md-3">
+              <label
+                className="form-label small fw-semibold mb-1"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Status
+              </label>
+              <select
+                className="form-select form-select-sm"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  backgroundColor: "var(--input-bg)",
+                  borderColor: "var(--input-border)",
+                  color: "var(--input-text)",
+                }}
+              >
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="col-md-3">
               <label
                 className="form-label small fw-semibold mb-1"
                 style={{ color: "var(--text-muted)" }}
@@ -588,8 +755,8 @@ const ProductCategories = () => {
         >
           <div className="d-flex justify-content-between align-items-center">
             <h5 className="card-title mb-0 fw-semibold text-white">
-              <i className="fas fa-tags me-2"></i>
-              Category Catalog
+              <i className="fas fa-layer-group me-2"></i>
+              Section Catalog
               {!loading && (
                 <small className="opacity-75 ms-2 text-white">
                   ({paginationMeta.total} total)
@@ -612,25 +779,42 @@ const ProductCategories = () => {
                     </th>
                     <th
                       className="text-center small fw-semibold"
-                      style={{ width: "10%" }}
+                      style={{ width: "5%" }}
+                    >
+                      Order
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "15%" }}>
+                      Name
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "20%" }}>
+                      Title
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "15%" }}>
+                      Source
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Products
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Style
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Status
+                    </th>
+                    <th
+                      className="text-center small fw-semibold"
+                      style={{ width: "17%" }}
                     >
                       Actions
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "30%" }}>
-                      Category
-                    </th>
-                    <th className="small fw-semibold">Description</th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Items Tagged
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Created
                     </th>
                   </tr>
                 </thead>
@@ -649,14 +833,15 @@ const ProductCategories = () => {
                   <span className="visually-hidden">Loading...</span>
                 </div>
                 <span className="small" style={{ color: "var(--text-muted)" }}>
-                  Fetching categories data...
+                  Fetching sections data...
                 </span>
               </div>
             </div>
-          ) : categories.length === 0 ? (
+          ) : sections.length === 0 ? (
             <EmptyState
-              onAddCategory={handleAddCategory}
+              onAddSection={handleNewSection}
               isActionDisabled={isActionDisabled}
+              hasFilters={!!(searchTerm || statusFilter)}
             />
           ) : (
             <div className="table-responsive">
@@ -671,194 +856,301 @@ const ProductCategories = () => {
                     </th>
                     <th
                       className="text-center small fw-semibold"
-                      style={{ width: "10%" }}
+                      style={{ width: "5%" }}
+                    >
+                      Order
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "15%" }}>
+                      Name
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "20%" }}>
+                      Title
+                    </th>
+                    <th className="small fw-semibold" style={{ width: "15%" }}>
+                      Source
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Products
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Style
+                    </th>
+                    <th
+                      className="small fw-semibold text-center"
+                      style={{ width: "8%" }}
+                    >
+                      Status
+                    </th>
+                    <th
+                      className="text-center small fw-semibold"
+                      style={{ width: "17%" }}
                     >
                       Actions
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "30%" }}>
-                      Category
-                    </th>
-                    <th className="small fw-semibold">Description</th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Items Tagged
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Created
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((category, index) => (
-                    <tr key={category.id} className="align-middle">
-                      <td
-                        className="text-center fw-bold"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {startIndex + index + 1}
-                      </td>
-                      <td className="text-center">
-                        <div className="d-flex justify-content-center gap-1">
-                          <button
-                            className="btn btn-success btn-sm text-white"
-                            onClick={() => handleEditCategory(category)}
-                            disabled={isActionDisabled(category.id)}
-                            title="Edit category"
-                            style={{
-                              width: "32px",
-                              height: "32px",
-                              borderRadius: "6px",
-                              transition: "all 0.2s ease-in-out",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!e.target.disabled) {
-                                e.target.style.transform = "translateY(-1px)";
-                                e.target.style.boxShadow =
-                                  "0 4px 8px rgba(0,0,0,0.2)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.transform = "translateY(0)";
-                              e.target.style.boxShadow = "none";
-                            }}
-                          >
-                            {actionLoading === category.id ? (
-                              <span
-                                className="spinner-border spinner-border-sm"
-                                role="status"
-                              ></span>
-                            ) : (
-                              <i
-                                className="fas fa-edit"
-                                style={{ fontSize: "0.875rem" }}
-                              ></i>
-                            )}
-                          </button>
-                          <button
-                            className="btn btn-danger btn-sm text-white"
-                            onClick={() => handleDeleteCategory(category)}
-                            disabled={isActionDisabled(category.id)}
-                            title="Delete category"
-                            style={{
-                              width: "32px",
-                              height: "32px",
-                              borderRadius: "6px",
-                              transition: "all 0.2s ease-in-out",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!e.target.disabled) {
-                                e.target.style.transform = "translateY(-1px)";
-                                e.target.style.boxShadow =
-                                  "0 4px 8px rgba(0,0,0,0.2)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.transform = "translateY(0)";
-                              e.target.style.boxShadow = "none";
-                            }}
-                          >
-                            {actionLoading === category.id ? (
-                              <span
-                                className="spinner-border spinner-border-sm"
-                                role="status"
-                              ></span>
-                            ) : (
-                              <i
-                                className="fas fa-trash"
-                                style={{ fontSize: "0.875rem" }}
-                              ></i>
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td style={{ maxWidth: "250px", overflow: "hidden" }}>
-                        <div
-                          className="fw-medium"
-                          style={{
-                            color: "var(--text-primary)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={category.name}
+                  {sections.map((section, index) => {
+                    const actualIndex = allSections.findIndex(s => s.id === section.id);
+                    return (
+                      <tr key={section.id} className="align-middle">
+                        <td
+                          className="text-center fw-bold"
+                          style={{ color: "var(--text-primary)" }}
                         >
-                          {category.name}
-                        </div>
-                      </td>
-                      <td style={{ maxWidth: "300px", overflow: "hidden" }}>
-                        <div
-                          className="small"
-                          style={{
-                            color: "var(--text-muted)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={
-                            category.description || "No description provided"
-                          }
-                        >
-                          {category.description || "No description provided"}
-                        </div>
-                      </td>
-                      <td
-                        className="text-center fw-semibold"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {category.items_count ?? 0}
-                      </td>
-                      <td className="text-center text-muted small">
-                        {category.created_at ? (
-                          <div className="d-flex flex-row align-items-center justify-content-center gap-1" style={{ whiteSpace: "nowrap" }}>
-                            <span className="text-nowrap">
-                              {new Date(category.created_at).toLocaleDateString(
-                                "en-US",
-                                {
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
+                          {startIndex + index + 1}
+                        </td>
+                        <td className="text-center">
+                          <div className="d-flex flex-column gap-1 align-items-center">
+                            <button
+                              className="btn btn-sm btn-outline-secondary p-1"
+                              onClick={() => handleMoveUp(section, actualIndex)}
+                              disabled={actualIndex === 0 || actionLock}
+                              style={{ 
+                                fontSize: '0.7rem', 
+                                lineHeight: 1,
+                                width: '24px',
+                                height: '24px',
+                                transition: "all 0.2s ease-in-out",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
                                 }
-                              )}
-                            </span>
-                            <span 
-                              className="text-nowrap"
-                              style={{ fontSize: "0.75rem", opacity: 0.8 }}
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
                             >
-                              {new Date(category.created_at).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: true,
+                              <i className="fas fa-chevron-up"></i>
+                            </button>
+                            <button
+                              className="btn btn-sm btn-outline-secondary p-1"
+                              onClick={() => handleMoveDown(section, actualIndex)}
+                              disabled={actualIndex === allSections.length - 1 || actionLock}
+                              style={{ 
+                                fontSize: '0.7rem', 
+                                lineHeight: 1,
+                                width: '24px',
+                                height: '24px',
+                                transition: "all 0.2s ease-in-out",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
                                 }
-                              )}
-                            </span>
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            >
+                              <i className="fas fa-chevron-down"></i>
+                            </button>
                           </div>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td style={{ maxWidth: "200px", overflow: "hidden" }}>
+                          <code
+                            className="small"
+                            style={{
+                              color: "var(--text-muted)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={section.name}
+                          >
+                            {section.name}
+                          </code>
+                        </td>
+                        <td style={{ maxWidth: "250px", overflow: "hidden" }}>
+                          <div
+                            className="fw-medium"
+                            style={{
+                              color: "var(--text-primary)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={section.title}
+                          >
+                            {section.title}
+                          </div>
+                          {section.description && (
+                            <div
+                              className="small"
+                              style={{
+                                color: "var(--text-muted)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={section.description}
+                            >
+                              {section.description}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge bg-info">{getSourceLabel(section)}</span>
+                        </td>
+                        <td
+                          className="text-center fw-semibold"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          {section.product_count ?? 0}
+                        </td>
+                        <td className="text-center">
+                          <span className="badge bg-secondary text-capitalize">
+                            {section.display_style}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <span
+                            className={`badge ${section.is_active ? 'bg-success' : 'bg-secondary'}`}
+                          >
+                            {section.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <div className="d-flex justify-content-center gap-1">
+                            <button
+                              className="btn btn-success btn-sm text-white"
+                              onClick={() => handleToggleActive(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title={section.is_active ? 'Deactivate' : 'Activate'}
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            >
+                              {actionLoading === section.id ? (
+                                <span
+                                  className="spinner-border spinner-border-sm"
+                                  role="status"
+                                ></span>
+                              ) : (
+                                <i
+                                  className={`fas ${section.is_active ? 'fa-eye-slash' : 'fa-eye'}`}
+                                  style={{ fontSize: "0.875rem" }}
+                                ></i>
+                              )}
+                            </button>
+                            <button
+                              className="btn btn-warning btn-sm text-white"
+                              onClick={() => handleEditSection(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title="Edit"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            >
+                              {actionLoading === section.id ? (
+                                <span
+                                  className="spinner-border spinner-border-sm"
+                                  role="status"
+                                ></span>
+                              ) : (
+                                <i
+                                  className="fas fa-edit"
+                                  style={{ fontSize: "0.875rem" }}
+                                ></i>
+                              )}
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm text-white"
+                              onClick={() => handleDeleteSection(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title="Delete"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            >
+                              {actionLoading === section.id ? (
+                                <span
+                                  className="spinner-border spinner-border-sm"
+                                  role="status"
+                                ></span>
+                              ) : (
+                                <i
+                                  className="fas fa-trash"
+                                  style={{ fontSize: "0.875rem" }}
+                                ></i>
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
-        {!loading && categories.length > 0 && (
+        {!loading && sections.length > 0 && (
           <div className="card-footer bg-white border-top px-3 py-2">
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
               <div className="text-center text-md-start">
@@ -871,7 +1163,7 @@ const ProductCategories = () => {
                     {paginationMeta.from || startIndex + 1}-
                     {paginationMeta.to ||
                       Math.min(
-                        startIndex + categories.length,
+                        startIndex + sections.length,
                         paginationMeta.total
                       )}
                   </span>{" "}
@@ -882,7 +1174,7 @@ const ProductCategories = () => {
                   >
                     {paginationMeta.total}
                   </span>{" "}
-                  categories
+                  sections
                 </small>
               </div>
 
@@ -1067,17 +1359,16 @@ const ProductCategories = () => {
         )}
       </div>
 
-      {showFormModal && (
-        <CategoryFormModal
-          token={token}
-          category={editingCategory}
+      {showSectionForm && (
+        <LandingPageSectionFormModal
+          isOpen={showSectionForm}
           onClose={() => {
-            setShowFormModal(false);
-            setEditingCategory(null);
+            setShowSectionForm(false);
+            setEditingSection(null);
           }}
-          onSave={handleSaveCategory}
-          saving={savingCategory}
-          setSaving={setSavingCategory}
+          onSave={handleSave}
+          section={editingSection}
+          collections={collections}
         />
       )}
 
@@ -1147,8 +1438,8 @@ const TableRowSkeleton = () => (
             key={item}
             className="placeholder action-placeholder"
             style={{
-              width: "32px",
-              height: "32px",
+              width: "24px",
+              height: "24px",
               borderRadius: "6px",
             }}
           ></div>
@@ -1156,21 +1447,11 @@ const TableRowSkeleton = () => (
       </div>
     </td>
     <td>
-      <div className="d-flex align-items-center">
-        <div className="flex-grow-1">
-          <div className="placeholder-wave mb-1">
-            <span
-              className="placeholder col-8"
-              style={{ height: "16px" }}
-            ></span>
-          </div>
-          <div className="placeholder-wave">
-            <span
-              className="placeholder col-6"
-              style={{ height: "14px" }}
-            ></span>
-          </div>
-        </div>
+      <div className="placeholder-wave">
+        <span
+          className="placeholder col-8"
+          style={{ height: "16px" }}
+        ></span>
       </div>
     </td>
     <td>
@@ -1188,13 +1469,38 @@ const TableRowSkeleton = () => (
     </td>
     <td>
       <div className="placeholder-wave">
-        <span className="placeholder col-8" style={{ height: "16px" }}></span>
+        <span className="placeholder col-4" style={{ height: "16px" }}></span>
+      </div>
+    </td>
+    <td>
+      <div className="placeholder-wave">
+        <span className="placeholder col-5" style={{ height: "16px" }}></span>
+      </div>
+    </td>
+    <td>
+      <div className="placeholder-wave">
+        <span className="placeholder col-5" style={{ height: "16px" }}></span>
+      </div>
+    </td>
+    <td className="text-center">
+      <div className="d-flex justify-content-center gap-1">
+        {[1, 2, 3].map((item) => (
+          <div
+            key={item}
+            className="placeholder action-placeholder"
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "6px",
+            }}
+          ></div>
+        ))}
       </div>
     </td>
   </tr>
 );
 
-const EmptyState = ({ onAddCategory, isActionDisabled }) => (
+const EmptyState = ({ onAddSection, isActionDisabled, hasFilters }) => (
   <div className="text-center py-5">
     <div className="mb-3">
       <i
@@ -1203,15 +1509,17 @@ const EmptyState = ({ onAddCategory, isActionDisabled }) => (
       ></i>
     </div>
     <h5 className="mb-2" style={{ color: "var(--text-muted)" }}>
-      No Categories Found
+      No Sections Found
     </h5>
     <p className="mb-3 small" style={{ color: "var(--text-muted)" }}>
-      Start by adding your first product category to organize your assets.
+      {hasFilters
+        ? "Try adjusting your filters to see more sections."
+        : "Start by adding your first landing page section to organize your content."}
     </p>
-    {onAddCategory && (
+    {!hasFilters && onAddSection && (
       <button
         className="btn btn-sm btn-primary text-white"
-        onClick={onAddCategory}
+        onClick={onAddSection}
         disabled={isActionDisabled?.()}
         style={{ transition: "all 0.2s ease-in-out", borderWidth: "2px", borderRadius: "4px" }}
         onMouseEnter={(e) => {
@@ -1226,500 +1534,11 @@ const EmptyState = ({ onAddCategory, isActionDisabled }) => (
         }}
       >
         <i className="fas fa-plus me-1"></i>
-        Add Category
+        Add Section
       </button>
     )}
   </div>
 );
 
-const CategoryFormModal = ({
-  category,
-  onClose,
-  onSave,
-  token,
-  saving,
-  setSaving,
-}) => {
-  const isEdit = !!category;
-  const [formData, setFormData] = useState(DEFAULT_CATEGORY_FORM);
-  const [errors, setErrors] = useState({});
-  const [isClosing, setIsClosing] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [swalShown, setSwalShown] = useState(false);
-  const initialFormState = useRef({});
-  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
+export default LandingPageSections;
 
-  useEffect(() => {
-    if (category) {
-      const categoryFormState = {
-        name: category.name || "",
-        description: category.description || "",
-      };
-      setFormData(categoryFormState);
-      initialFormState.current = { ...categoryFormState };
-    } else {
-      setFormData(DEFAULT_CATEGORY_FORM);
-      initialFormState.current = { ...DEFAULT_CATEGORY_FORM };
-    }
-    setErrors({});
-    setHasUnsavedChanges(false);
-  }, [category]);
-
-  // Check if form has unsaved changes
-  const checkFormChanges = (currentForm) => {
-    return JSON.stringify(currentForm) !== JSON.stringify(initialFormState.current);
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    const newForm = {
-      ...formData,
-      [name]: value,
-    };
-    setFormData(newForm);
-    setHasUnsavedChanges(checkFormChanges(newForm));
-    
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleCloseAttempt = async () => {
-    if (hasUnsavedChanges) {
-      setSwalShown(true);
-      const result = await showAlert.confirm(
-        'Unsaved Changes',
-        'You have unsaved changes. Are you sure you want to close without saving?',
-        'Yes, Close',
-        'Continue Editing'
-      );
-      setSwalShown(false);
-
-      if (result.isConfirmed) {
-        await closeModal();
-      }
-    } else {
-      await closeModal();
-    }
-  };
-
-  const handleBackdropClick = async (e) => {
-    if (e.target === e.currentTarget && !saving) {
-      await handleCloseAttempt();
-    }
-  };
-
-  const handleEscapeKey = async (e) => {
-    if (e.key === 'Escape' && !saving) {
-      e.preventDefault();
-      await handleCloseAttempt();
-    }
-  };
-
-  const handleCloseButtonClick = async () => {
-    await handleCloseAttempt();
-  };
-
-  const closeModal = async () => {
-    setIsClosing(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    onClose();
-  };
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleEscapeKey);
-    
-    return () => {
-      document.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [saving, hasUnsavedChanges]);
-
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) {
-      newErrors.name = "Category name is required";
-    }
-    if (formData.description && formData.description.length > 500) {
-      newErrors.description = "Description must be 500 characters or less";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (saving) return;
-    if (!validateForm()) return;
-
-    // NUCLEAR FIX: Create abort controller for timeout protection
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      abortController.abort();
-    }, 30000); // 30 second timeout
-
-    // NUCLEAR FIX: Flag to track if we've already closed the alert
-    let alertClosed = false;
-    const closeAlertSafely = () => {
-      if (!alertClosed) {
-        try {
-          showAlert.close();
-          alertClosed = true;
-        } catch (e) {
-          console.error("Error closing alert:", e);
-          // Force close using Swal directly as fallback
-          try {
-            if (Swal && Swal.isVisible && Swal.isVisible()) {
-              Swal.close();
-              alertClosed = true;
-            }
-          } catch (swalError) {
-            console.error("Error force-closing Swal:", swalError);
-            // Last resort: try to remove Swal overlay from DOM
-            try {
-              const swalOverlay = document.querySelector('.swal2-container');
-              if (swalOverlay) {
-                swalOverlay.remove();
-                alertClosed = true;
-              }
-            } catch (domError) {
-              console.error("Error removing Swal from DOM:", domError);
-            }
-          }
-        }
-      }
-    };
-
-    setSaving(true);
-    
-    // Show processing alert
-    try {
-      showAlert.processing(
-        isEdit ? "Updating Category" : "Creating Category",
-        isEdit ? "Saving category updates..." : "Registering new category..."
-      );
-    } catch (alertError) {
-      console.error("Error showing processing alert:", alertError);
-    }
-
-    try {
-      const url = isEdit
-        ? `${apiBaseUrl}/product-categories/${category.id}`
-        : `${apiBaseUrl}/product-categories`;
-
-      const method = isEdit ? "PUT" : "POST";
-
-      // NUCLEAR FIX: Fetch with timeout and abort signal
-      const response = await fetch(url, {
-        method: method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          description: formData.description?.trim() || null,
-        }),
-        signal: abortController.signal, // Add abort signal for timeout
-      });
-
-      // Clear timeout since we got a response
-      clearTimeout(timeoutId);
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        // If response is not JSON, get text instead
-        const text = await response.text();
-        throw new Error(text || `Server error: ${response.status} ${response.statusText}`);
-      }
-
-      if (!response.ok) {
-        // Handle validation errors (including duplicate category errors)
-        if (data.errors) {
-          const errorMessages = Object.entries(data.errors)
-            .map(([field, messages]) => {
-              const messageText = Array.isArray(messages) ? messages[0] : messages;
-              return `${field}: ${messageText}`;
-            })
-            .join("\n");
-          
-          // Create a more specific error for duplicate categories
-          const duplicateError = Object.entries(data.errors).find(([field, messages]) => {
-            const messageText = Array.isArray(messages) ? messages[0] : messages;
-            const msg = String(messageText).toLowerCase();
-            return msg.includes('duplicate') || 
-                   msg.includes('already exists') || 
-                   msg.includes('taken') ||
-                   msg.includes('unique');
-          });
-          
-          if (duplicateError) {
-            const duplicateMsg = Array.isArray(duplicateError[1]) 
-              ? duplicateError[1][0] 
-              : duplicateError[1];
-            throw new Error(duplicateMsg || "A category with this name already exists.");
-          }
-          
-          throw new Error(errorMessages);
-        }
-        
-        // Check if the message itself indicates a duplicate
-        const errorMsg = data.message || "Failed to save category";
-        if (errorMsg.toLowerCase().includes('duplicate') || 
-            errorMsg.toLowerCase().includes('already exists') ||
-            errorMsg.toLowerCase().includes('taken') ||
-            errorMsg.toLowerCase().includes('unique')) {
-          throw new Error(errorMsg);
-        }
-        
-        throw new Error(errorMsg);
-      }
-
-      // SUCCESS PATH: Close alert and show success
-      closeAlertSafely();
-      toast.success(
-        isEdit
-          ? "Category updated successfully!"
-          : "Category created successfully!",
-        {
-          style: { zIndex: 100002 }
-        }
-      );
-      setHasUnsavedChanges(false);
-      onSave();
-      closeModal();
-      
-    } catch (error) {
-      // NUCLEAR FIX: Clear timeout in error case too
-      clearTimeout(timeoutId);
-      
-      console.error("Save category error:", error);
-      
-      // NUCLEAR FIX: ALWAYS close alert, no matter what
-      closeAlertSafely();
-      
-      // Determine error message
-      let errorMessage = "Failed to save category";
-      let errorTitle = "Error";
-      
-      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-        errorMessage = "Request timed out. Please check your connection and try again.";
-        errorTitle = "Request Timeout";
-      } else if (error.message) {
-        errorMessage = error.message;
-        // Check if it's a duplicate/validation error
-        if (error.message.toLowerCase().includes('duplicate') || 
-            error.message.toLowerCase().includes('already exists') ||
-            error.message.toLowerCase().includes('name') && error.message.toLowerCase().includes('taken')) {
-          errorTitle = "Category Already Exists";
-        } else if (error.message.toLowerCase().includes('validation') || 
-                   error.message.toLowerCase().includes('required')) {
-          errorTitle = "Validation Error";
-        }
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-      
-      // CRITICAL FIX: Reset saving state IMMEDIATELY to prevent stuck loading state
-      setSaving(false);
-      
-      // Show error using SweetAlert modal (more visible and prominent)
-      try {
-        await showAlert.error(
-          errorTitle,
-          errorMessage,
-          {
-            zIndex: 100001, // Above modal but below toast container
-            confirmButtonText: 'OK',
-            allowOutsideClick: true,
-            allowEscapeKey: true,
-          }
-        );
-      } catch (swalError) {
-        console.error("Error showing SweetAlert:", swalError);
-        // Fallback to toast if SweetAlert fails
-        toast.error(errorMessage, {
-          style: { zIndex: 100002 }
-        });
-      }
-    } finally {
-      // NUCLEAR FIX: ALWAYS ensure cleanup happens
-      clearTimeout(timeoutId);
-      closeAlertSafely();
-      
-      // CRITICAL FIX: Reset saving state IMMEDIATELY (not in setTimeout)
-      // This ensures the form is never stuck in loading state
-      try {
-        setSaving(false);
-      } catch (e) {
-        console.error("Error resetting saving state:", e);
-      }
-      
-      // NUCLEAR FIX: Double-check alert is closed after a short delay
-      setTimeout(() => {
-        try {
-          if (Swal && Swal.isVisible && Swal.isVisible()) {
-            console.warn("Alert still visible after submit, force closing...");
-            Swal.close();
-          }
-          // Also check DOM for any lingering Swal overlays
-          const swalOverlay = document.querySelector('.swal2-container');
-          if (swalOverlay && !swalOverlay.querySelector('.swal2-popup')) {
-            // Only remove if it's not showing an error modal
-            console.warn("Swal overlay still in DOM, removing...");
-            swalOverlay.remove();
-          }
-        } catch (e) {
-          // Ignore errors in cleanup check
-        }
-      }, 200);
-    }
-  };
-
-  return (
-    <Portal>
-      <div
-        className={`modal fade show d-block modal-backdrop-animation ${
-          isClosing ? "exit" : ""
-        }`}
-        style={{ 
-          backgroundColor: swalShown ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.6)',
-          transition: 'background-color 0.2s ease',
-          zIndex: 9999, // Very high - above topbar (1039) but below SweetAlert (100000) and Toastify (100002)
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: '100%',
-          height: '100%',
-        }}
-        onClick={handleBackdropClick}
-        tabIndex="-1"
-      >
-        <div className="modal-dialog modal-dialog-centered modal-md mx-3 mx-sm-auto" style={{ zIndex: 10000 }}>
-          <div
-            className={`modal-content border-0 modal-content-animation ${
-              isClosing ? "exit" : ""
-            }`}
-            style={{
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              zIndex: 10000,
-            }}
-          >
-            <div
-              className="modal-header border-0 text-white modal-smooth"
-              style={{ backgroundColor: 'var(--primary-color)' }}
-            >
-              <h5 className="modal-title fw-bold">
-                <i className={`fas ${isEdit ? "fa-edit" : "fa-plus"} me-2`}></i>
-                {isEdit ? "Edit Category" : "New Category"}
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white btn-smooth"
-                onClick={handleCloseButtonClick}
-                disabled={saving}
-                style={{
-                  transition: 'all 0.2s ease',
-                }}
-              ></button>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div
-                className="modal-body modal-smooth"
-                style={{
-                  backgroundColor: '#f8f9fa',
-                }}
-              >
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold text-dark mb-1">
-                    Category Name <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className={`form-control modal-smooth ${
-                      errors.name ? "is-invalid" : ""
-                    }`}
-                    value={formData.name}
-                    onChange={handleChange}
-                    name="name"
-                    placeholder="e.g., Spreadsheet Templates"
-                    disabled={saving}
-                    style={{ backgroundColor: '#ffffff' }}
-                  />
-                  {errors.name && (
-                    <div className="invalid-feedback">{errors.name}</div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold text-dark mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    className={`form-control modal-smooth ${
-                      errors.description ? "is-invalid" : ""
-                    }`}
-                    rows="3"
-                    value={formData.description}
-                    onChange={handleChange}
-                    name="description"
-                    placeholder="Optional short description"
-                    disabled={saving}
-                    style={{ backgroundColor: '#ffffff' }}
-                  ></textarea>
-                  {errors.description && (
-                    <div className="invalid-feedback">{errors.description}</div>
-                  )}
-                </div>
-              </div>
-              <div className="modal-footer border-top bg-white modal-smooth">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary btn-smooth"
-                  onClick={handleCloseButtonClick}
-                  disabled={saving}
-                  style={{
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn fw-semibold position-relative btn-smooth"
-                  style={{
-                    backgroundColor: saving ? '#6c757d' : 'var(--primary-color)',
-                    borderColor: saving ? '#6c757d' : 'var(--primary-color)',
-                    color: 'white',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    minWidth: '140px',
-                  }}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2"></span>
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-save me-1"></i>
-                      {isEdit ? "Save Changes" : "Save Category"}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </Portal>
-  );
-};
-
-export default ProductCategories;

@@ -12,6 +12,8 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductList from './pages/admin/ProductList';
 import ProductCategories from './pages/admin/ProductCategories';
+import ProductCollections from './pages/admin/ProductCollections';
+import LandingPageSections from './pages/admin/LandingPageSections';
 import SidebarLayout from './layout/SidebarLayout';
 import { CartProvider } from './contexts/CartContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -45,6 +47,8 @@ const AppContent = () => {
                 <Route path="/admin/dashboard" element={<SidebarLayout><AdminDashboard /></SidebarLayout>} />
                 <Route path="/admin/products" element={<SidebarLayout><ProductList /></SidebarLayout>} />
                 <Route path="/admin/products/categories" element={<SidebarLayout><ProductCategories /></SidebarLayout>} />
+                <Route path="/admin/products/collections" element={<SidebarLayout><ProductCollections /></SidebarLayout>} />
+                <Route path="/admin/landing-page-sections" element={<SidebarLayout><LandingPageSections /></SidebarLayout>} />
                 <Route path="/admin/profile" element={<SidebarLayout><div className="container-fluid px-3 py-2"><h1>Profile</h1><p>Profile page coming soon...</p></div></SidebarLayout>} />
                 <Route path="/admin/settings" element={<SidebarLayout><div className="container-fluid px-3 py-2"><h1>Settings</h1><p>Settings page coming soon...</p></div></SidebarLayout>} />
 

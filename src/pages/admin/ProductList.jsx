@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { FaPlus, FaEdit, FaTrash, FaSearch, FaTimes, FaBox, FaCheckCircle, FaExclamationTriangle, FaSyncAlt } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaSearch, FaTimes, FaBox, FaCheckCircle, FaExclamationTriangle, FaSyncAlt, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProductFormModal from './ProductFormModal';
+import ProductDetailsModal from './ProductDetailsModal';
 import { showAlert } from '../../services/notificationService';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
+import ImageLightbox from '../../components/ImageLightbox';
 
 const ProductList = () => {
   const { token } = useAuth();
@@ -16,17 +18,182 @@ const ProductList = () => {
   const [actionLock, setActionLock] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // 'active', 'inactive', or '' for all
   const [categories, setCategories] = useState([]);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
+  const [featureIndexMap, setFeatureIndexMap] = useState({});
+  const [imageLoadingMap, setImageLoadingMap] = useState({}); // Track image loading state
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [imageModalUrl, setImageModalUrl] = useState(null);
+  const [imageModalIndex, setImageModalIndex] = useState(null);
+  const [imageModalGallery, setImageModalGallery] = useState([]);
+  const [imageCacheBuster, setImageCacheBuster] = useState(Date.now()); // Cache buster for image URLs
 
   // Modal states
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  // Files (storage) are served from the app root, not /api. Normalize so image URLs work even when VITE_LARAVEL_API ends with /api
+  const fileBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+  const buildAssetUrl = (rawPath) => {
+    if (!rawPath) return null;
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+      // Add cache buster to external URLs too
+      const separator = rawPath.includes('?') ? '&' : '?';
+      return `${rawPath}${separator}_t=${imageCacheBuster}`;
+    }
+    const cleaned = rawPath.replace(/^\/+/, '');
+    let url;
+    if (cleaned.startsWith('storage/')) {
+      url = `${fileBaseUrl}/${cleaned}`;
+    } else if (cleaned.startsWith('public/')) {
+      url = `${fileBaseUrl}/storage/${cleaned.replace(/^public\//, '')}`;
+    } else {
+      url = `${fileBaseUrl}/storage/${cleaned}`;
+    }
+    // Add cache buster to force browser to reload image after updates
+    return `${url}?_t=${imageCacheBuster}`;
+  };
+
+  const normalizeFeatureImages = (product) => {
+    if (!product) return [];
+
+    const collectRaw = () => {
+      const candidates = [
+        product.feature_images,
+        product.featureImages,
+        product.feature_images_json,
+        product.feature_images_urls,
+        product.feature_image,
+        product.gallery,
+        product.images,
+      ].filter(Boolean);
+      return candidates.length ? candidates : [];
+    };
+
+    const asArray = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+          return val.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+      return [val];
+    };
+
+    const rawImages = collectRaw().flatMap(asArray);
+
+    return rawImages
+      .map((img) => {
+        if (!img) return null;
+        if (typeof img === 'object') {
+          if (img.url) return buildAssetUrl(img.url);
+          if (img.path) return buildAssetUrl(img.path);
+          if (img.full_url) return buildAssetUrl(img.full_url);
+        }
+        return buildAssetUrl(img);
+      })
+      .filter(Boolean);
+  };
+
+  const getPrimaryImage = (product) => {
+    const featureImages = normalizeFeatureImages(product);
+    const candidate =
+      product.thumbnail_image ||
+      product.thumbnail ||
+      product.image ||
+      featureImages[0] ||
+      null;
+    return buildAssetUrl(candidate);
+  };
+
+  const getThumbnailOnly = (product) => {
+    const candidate =
+      (product && product.thumbnail_image) ||
+      (product && product.thumbnail) ||
+      (product && product.image) ||
+      null;
+    return buildAssetUrl(candidate);
+  };
+
+  const buildGallery = (product) => {
+    const gallery = [
+      getThumbnailOnly(product),
+      ...normalizeFeatureImages(product),
+    ].filter(Boolean);
+    const seen = new Set();
+    const unique = [];
+    for (const img of gallery) {
+      const key = img;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        unique.push(img);
+      }
+    }
+    return unique;
+  };
+
+  const getFeatureIndex = (productId, length) => {
+    if (!length) return 0;
+    const idx = featureIndexMap[productId] ?? 0;
+    return Math.min(idx, length - 1);
+  };
+
+  const cycleFeature = (productId, length, direction = 1) => {
+    if (!length || length < 2) return;
+    setFeatureIndexMap((prev) => {
+      const current = prev[productId] ?? 0;
+      const next = (current + direction + length) % length;
+      return { ...prev, [productId]: next };
+    });
+  };
+
+  const openImageModal = (url, event = null, gallery = null, index = 0) => {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!url) return;
+    setImageModalUrl(url);
+    setImageModalGallery(gallery || [url]);
+    setImageModalIndex(index);
+    setShowImageModal(true);
+  };
+
+  const closeImageModal = () => {
+    setShowImageModal(false);
+    setImageModalUrl(null);
+    setImageModalGallery([]);
+    setImageModalIndex(null);
+  };
+
+  const showNextImage = () => {
+    if (imageModalGallery.length === 0) return;
+    const nextIndex = ((imageModalIndex ?? 0) + 1) % imageModalGallery.length;
+    setImageModalIndex(nextIndex);
+    setImageModalUrl(imageModalGallery[nextIndex]);
+  };
+
+  const showPrevImage = () => {
+    if (imageModalGallery.length === 0) return;
+    const prevIndex = (imageModalIndex ?? 0) - 1;
+    const finalIndex = prevIndex < 0 ? imageModalGallery.length - 1 : prevIndex;
+    setImageModalIndex(finalIndex);
+    setImageModalUrl(imageModalGallery[finalIndex]);
+  };
+
 
   useEffect(() => {
     fetchProducts();
@@ -35,16 +202,54 @@ const ProductList = () => {
 
   useEffect(() => {
     filterAndSortProducts();
-  }, [products, searchTerm, categoryFilter, sortField, sortDirection]);
+  }, [products, searchTerm, categoryFilter, statusFilter, sortField, sortDirection]);
+
+  // Initialize image loading states when products change
+  useEffect(() => {
+    if (products.length > 0) {
+      const initialLoadingMap = {};
+      products.forEach((product) => {
+        const thumbnailUrl = getThumbnailOnly(product) || getPrimaryImage(product);
+        if (thumbnailUrl) {
+          initialLoadingMap[thumbnailUrl] = true;
+        }
+        // Also initialize feature images
+        const featureImages = normalizeFeatureImages(product);
+        featureImages.forEach((img) => {
+          if (img) {
+            initialLoadingMap[img] = true;
+          }
+        });
+      });
+      // Always merge initial loading states (set to true for all new images)
+      setImageLoadingMap(prev => {
+        const merged = { ...prev };
+        Object.keys(initialLoadingMap).forEach(url => {
+          // Only set to true if not already false (loaded)
+          if (merged[url] !== false) {
+            merged[url] = true;
+          }
+        });
+        return merged;
+      });
+    }
+  }, [products, imageCacheBuster]);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
+      // Clear image loading cache when fetching products to ensure fresh images load
+      setImageLoadingMap({});
+      // Update cache buster to force browser to reload all images
+      const newCacheBuster = Date.now();
+      setImageCacheBuster(newCacheBuster);
       const response = await fetch(`${apiBaseUrl}/products?per_page=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
+        // Add cache control to prevent browser from caching the API response
+        cache: 'no-cache',
       });
 
       if (response.ok) {
@@ -59,10 +264,84 @@ const ProductList = () => {
         
         // Debug: Log first product to check structure
         if (productsData.length > 0) {
-          console.log('Sample product data:', productsData[0]);
-          console.log('Thumbnail image field:', productsData[0].thumbnail_image);
+          console.log('Fetched products, sample product:', productsData[0]);
+          console.log('Sample product thumbnail:', productsData[0].thumbnail_image);
+          console.log('Sample product feature_images:', productsData[0].feature_images);
+          console.log('Image cache buster:', imageCacheBuster);
         }
         
+        // Initialize image loading states immediately when products are fetched
+        // Use a temporary buildAssetUrl that uses the new cache buster
+        const buildAssetUrlWithCache = (rawPath) => {
+          if (!rawPath) return null;
+          if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+            const separator = rawPath.includes('?') ? '&' : '?';
+            return `${rawPath}${separator}_t=${newCacheBuster}`;
+          }
+          const cleaned = rawPath.replace(/^\/+/, '');
+          let url;
+          if (cleaned.startsWith('storage/')) {
+            url = `${fileBaseUrl}/${cleaned}`;
+          } else if (cleaned.startsWith('public/')) {
+            url = `${fileBaseUrl}/storage/${cleaned.replace(/^public\//, '')}`;
+          } else {
+            url = `${fileBaseUrl}/storage/${cleaned}`;
+          }
+          return `${url}?_t=${newCacheBuster}`;
+        };
+        
+        const initialLoadingMap = {};
+        productsData.forEach((product) => {
+          const thumbnailUrl = buildAssetUrlWithCache(
+            product.thumbnail_image || product.thumbnail || product.image
+          );
+          if (thumbnailUrl) {
+            initialLoadingMap[thumbnailUrl] = true;
+          }
+          
+          // Initialize feature images - normalize them and add cache buster
+          const featureImagesRaw = [
+            product.feature_images,
+            product.featureImages,
+            product.feature_images_json,
+            product.feature_images_urls,
+            product.feature_image,
+            product.gallery,
+            product.images,
+          ].filter(Boolean);
+          
+          featureImagesRaw.forEach((imgRaw) => {
+            if (Array.isArray(imgRaw)) {
+              imgRaw.forEach(img => {
+                const url = buildAssetUrlWithCache(img);
+                if (url) initialLoadingMap[url] = true;
+              });
+            } else if (typeof imgRaw === 'string') {
+              try {
+                const parsed = JSON.parse(imgRaw);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach(img => {
+                    const url = buildAssetUrlWithCache(img);
+                    if (url) initialLoadingMap[url] = true;
+                  });
+                } else {
+                  const url = buildAssetUrlWithCache(imgRaw);
+                  if (url) initialLoadingMap[url] = true;
+                }
+              } catch (e) {
+                imgRaw.split(',').forEach(img => {
+                  const url = buildAssetUrlWithCache(img.trim());
+                  if (url) initialLoadingMap[url] = true;
+                });
+              }
+            } else if (imgRaw && typeof imgRaw === 'object') {
+              const url = buildAssetUrlWithCache(imgRaw.url || imgRaw.path || imgRaw.full_url);
+              if (url) initialLoadingMap[url] = true;
+            }
+          });
+        });
+        
+        setImageLoadingMap(initialLoadingMap);
         setProducts(productsData);
       } else {
         toast.error('Failed to load products');
@@ -136,6 +415,14 @@ const ProductList = () => {
       filtered = filtered.filter((product) => product.category === categoryFilter);
     }
 
+    // Status filter (Active/Inactive)
+    if (statusFilter) {
+      if (statusFilter === 'active') {
+        filtered = filtered.filter((product) => product.is_active === true);
+      } else if (statusFilter === 'inactive') {
+        filtered = filtered.filter((product) => product.is_active === false);
+      }
+    }
 
     // Sorting
     filtered.sort((a, b) => {
@@ -153,6 +440,15 @@ const ProductList = () => {
       if (sortField === 'price') {
         const aValue = parseFloat(a.price || 0);
         const bValue = parseFloat(b.price || 0);
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      }
+
+      // Sort by on_sale (boolean)
+      if (sortField === 'on_sale') {
+        const aValue = a.on_sale ? 1 : 0;
+        const bValue = b.on_sale ? 1 : 0;
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
         return 0;
@@ -236,7 +532,12 @@ const ProductList = () => {
   const clearFilters = () => {
     setSearchTerm('');
     setCategoryFilter('');
+    setStatusFilter('');
+    setSortField('created_at');
+    setSortDirection('desc');
   };
+
+  const hasActiveFilters = searchTerm || categoryFilter || statusFilter || sortField !== 'created_at' || sortDirection !== 'desc';
 
   const refreshAllData = async () => {
     if (actionLock) {
@@ -252,6 +553,24 @@ const ProductList = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  };
+
+  const getPlainText = (value) => {
+    if (!value) return '';
+    return String(value).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const getSortIcon = (field) => {
@@ -348,6 +667,7 @@ const ProductList = () => {
             className="h4 mb-1 fw-bold"
             style={{ color: 'var(--text-primary)' }}
           >
+            <FaBox className="me-2" />
             Product Management
           </h1>
           <p className="mb-0 small" style={{ color: 'var(--text-muted)' }}>
@@ -363,7 +683,7 @@ const ProductList = () => {
             Total Products: {loading ? '...' : products.length}
           </div>
           <button
-            className="btn btn-sm btn-success text-white"
+            className="btn btn-sm btn-primary text-white"
             onClick={() => {
               setEditingProduct(null);
               setShowProductForm(true);
@@ -372,6 +692,7 @@ const ProductList = () => {
             style={{
               transition: 'all 0.2s ease-in-out',
               borderWidth: '2px',
+              borderRadius: '4px',
             }}
             onMouseEnter={(e) => {
               if (!e.target.disabled) {
@@ -615,6 +936,29 @@ const ProductList = () => {
                 className="form-label small fw-semibold mb-1"
                 style={{ color: 'var(--text-muted)' }}
               >
+                Status
+              </label>
+              <select
+                className="form-select form-select-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                disabled={loading || isActionDisabled()}
+                style={{
+                  backgroundColor: 'var(--input-bg)',
+                  borderColor: 'var(--input-border)',
+                  color: 'var(--input-text)',
+                }}
+              >
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="col-md-2">
+              <label
+                className="form-label small fw-semibold mb-1"
+                style={{ color: 'var(--text-muted)' }}
+              >
                 Items per page
               </label>
               <select
@@ -633,6 +977,18 @@ const ProductList = () => {
                 <option value="20">20 per page</option>
                 <option value="50">50 per page</option>
               </select>
+            </div>
+            <div className="col-md-2 d-flex align-items-end">
+              <button
+                className="btn btn-sm btn-outline-secondary w-100"
+                type="button"
+                onClick={clearFilters}
+                disabled={loading || isActionDisabled() || !hasActiveFilters}
+                style={{ fontSize: '0.875rem', marginBottom: '0' }}
+              >
+                <i className="fas fa-filter me-1"></i>
+                Clear All Filters
+              </button>
             </div>
           </div>
         </div>
@@ -729,71 +1085,80 @@ const ProductList = () => {
             </div>
           ) : (
             <>
-              {/* Sort Controls */}
-              <div className="px-3 py-2 border-bottom d-flex flex-wrap align-items-center gap-2" style={{ backgroundColor: 'var(--background-light)' }}>
-                <small className="text-muted fw-semibold">Sort by:</small>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => handleSort('title')}
-                  disabled={isActionDisabled()}
-                  style={{ fontSize: '0.875rem' }}
-                >
-                  Title <i className={`ms-1 ${getSortIcon('title')}`}></i>
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => handleSort('category')}
-                  disabled={isActionDisabled()}
-                  style={{ fontSize: '0.875rem' }}
-                >
-                  Category <i className={`ms-1 ${getSortIcon('category')}`}></i>
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => handleSort('price')}
-                  disabled={isActionDisabled()}
-                  style={{ fontSize: '0.875rem' }}
-                >
-                  Price <i className={`ms-1 ${getSortIcon('price')}`}></i>
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => handleSort('created_at')}
-                  disabled={isActionDisabled()}
-                  style={{ fontSize: '0.875rem' }}
-                >
-                  Date <i className={`ms-1 ${getSortIcon('created_at')}`}></i>
-                </button>
+              {/* Sort Controls + View Toggle */}
+              <div className="px-3 py-2 border-bottom d-flex flex-wrap align-items-center gap-2 justify-content-between" style={{ backgroundColor: 'var(--background-light)' }}>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <small className="text-muted fw-semibold">Sort by:</small>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => handleSort('title')}
+                    disabled={isActionDisabled()}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    Title <i className={`ms-1 ${getSortIcon('title')}`}></i>
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => handleSort('category')}
+                    disabled={isActionDisabled()}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    Category <i className={`ms-1 ${getSortIcon('category')}`}></i>
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => handleSort('price')}
+                    disabled={isActionDisabled()}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    Price <i className={`ms-1 ${getSortIcon('price')}`}></i>
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => handleSort('on_sale')}
+                    disabled={isActionDisabled()}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    On Sale <i className={`ms-1 ${getSortIcon('on_sale')}`}></i>
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => handleSort('created_at')}
+                    disabled={isActionDisabled()}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    Date <i className={`ms-1 ${getSortIcon('created_at')}`}></i>
+                  </button>
+                </div>
+                <div className="d-flex align-items-center gap-1">
+                  <small className="text-muted fw-semibold me-1">View:</small>
+                  <button
+                    className={`btn btn-sm ${viewMode === 'list' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setViewMode('list')}
+                    disabled={isActionDisabled()}
+                  >
+                    List
+                  </button>
+                  <button
+                    className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setViewMode('grid')}
+                    disabled={isActionDisabled()}
+                  >
+                    Grid
+                  </button>
+                </div>
               </div>
 
               {/* Product Grid */}
               <div className="p-3">
                 <div className="row g-3">
                   {currentProducts.map((product) => {
-                    // Try multiple possible field names for thumbnail image
-                    const thumbnailPath = product.thumbnail_image || 
-                                         product.thumbnail || 
-                                         product.image || 
-                                         null;
+                    const featureImages = normalizeFeatureImages(product);
+                    const featureIdx = getFeatureIndex(product.id, featureImages.length);
+                    const thumbnailUrl = getThumbnailOnly(product) || getPrimaryImage(product);
+                    const displayImage = thumbnailUrl;
                     
-                    // Build thumbnail URL - handle different path formats
-                    let thumbnailUrl = null;
-                    if (thumbnailPath) {
-                      // If it's already a full URL, use it as is
-                      if (thumbnailPath.startsWith('http://') || thumbnailPath.startsWith('https://')) {
-                        thumbnailUrl = thumbnailPath;
-                      }
-                      // If it starts with storage/, just prepend apiBaseUrl
-                      else if (thumbnailPath.startsWith('storage/')) {
-                        thumbnailUrl = `${apiBaseUrl}/${thumbnailPath}`;
-                      }
-                      // Otherwise, prepend storage/ path
-                      else {
-                        thumbnailUrl = `${apiBaseUrl}/storage/${thumbnailPath}`;
-                      }
-                    }
-                    
-                    return (
+                    return viewMode === 'grid' ? (
                       <div key={product.id} className="col-6 col-md-4 col-lg-3 col-xl-2-4">
                         <div
                           className="card h-100 product-card shadow-sm border"
@@ -802,6 +1167,10 @@ const ProductList = () => {
                             cursor: 'pointer',
                             borderRadius: '8px',
                             overflow: 'hidden',
+                          }}
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setShowDetailModal(true);
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.transform = 'translateY(-4px)';
@@ -820,38 +1189,83 @@ const ProductList = () => {
                           <div
                             className="position-relative"
                             style={{
+                              width: '100%',
                               height: '200px',
+                              minHeight: '200px',
                               backgroundColor: 'var(--background-light)',
                               overflow: 'hidden',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
                             }}
                           >
-                            {thumbnailUrl ? (
-                              <img
-                                src={thumbnailUrl}
-                                alt={product.title}
-                                className="w-100 h-100"
-                                style={{
-                                  objectFit: 'cover',
-                                  transition: 'transform 0.3s ease',
-                                }}
-                                onError={(e) => {
-                                  console.error('Failed to load thumbnail image:', thumbnailUrl);
-                                  e.target.style.display = 'none';
-                                  const placeholder = e.target.nextElementSibling;
-                                  if (placeholder) {
-                                    placeholder.style.display = 'flex';
-                                  }
-                                }}
-                                onLoad={() => {
-                                  console.log('Thumbnail image loaded successfully:', thumbnailUrl);
-                                }}
-                              />
+                            {displayImage ? (
+                              <>
+                                {/* Loading Skeleton - Show when image is not fully loaded */}
+                                {imageLoadingMap[displayImage] !== false && (
+                                  <div
+                                    className="position-absolute w-100 h-100 skeleton-shimmer"
+                                    style={{
+                                      backgroundColor: '#E0E0E0',
+                                      background: 'linear-gradient(90deg, #E0E0E0 25%, #F5F5F5 50%, #E0E0E0 75%)',
+                                      backgroundSize: '200% 100%',
+                                      animation: 'shimmer 1.5s ease-in-out infinite',
+                                      zIndex: 1,
+                                      top: 0,
+                                      left: 0,
+                                    }}
+                                  />
+                                )}
+                                <img
+                                  key={`${product.id}-${imageCacheBuster}-${displayImage}`}
+                                  src={displayImage}
+                                  alt={product.title}
+                                  style={{
+                                    width: 'auto',
+                                    height: 'auto',
+                                    maxWidth: '100%',
+                                    maxHeight: '100%',
+                                    minHeight: '200px',
+                                    objectFit: 'contain',
+                                    objectPosition: 'center',
+                                    transition: 'opacity 0.3s ease',
+                                    opacity: imageLoadingMap[displayImage] === false ? 1 : 0,
+                                    position: 'relative',
+                                    zIndex: 2,
+                                    display: 'block',
+                                  }}
+                                  onLoadStart={() => {
+                                    setImageLoadingMap(prev => ({
+                                      ...prev,
+                                      [displayImage]: true
+                                    }));
+                                  }}
+                                  onLoad={() => {
+                                    setImageLoadingMap(prev => ({
+                                      ...prev,
+                                      [displayImage]: false
+                                    }));
+                                  }}
+                                  onError={(e) => {
+                                    console.error('Failed to load product image:', displayImage);
+                                    setImageLoadingMap(prev => ({ ...prev, [displayImage]: false }));
+                                    e.target.style.display = 'none';
+                                    const placeholder = e.target.parentElement.querySelector('.image-placeholder');
+                                    if (placeholder) {
+                                      placeholder.style.display = 'flex';
+                                    }
+                                  }}
+                                />
+                              </>
                             ) : null}
                             <div
-                              className="w-100 h-100 d-flex align-items-center justify-content-center"
+                              className="position-absolute w-100 h-100 d-flex align-items-center justify-content-center image-placeholder"
                               style={{
-                                display: thumbnailUrl ? 'none' : 'flex',
+                                display: displayImage ? 'none' : 'flex',
                                 backgroundColor: 'var(--background-light)',
+                                top: 0,
+                                left: 0,
+                                zIndex: 0,
                               }}
                             >
                               <i
@@ -859,9 +1273,10 @@ const ProductList = () => {
                                 style={{ color: 'var(--text-muted)', opacity: 0.3 }}
                               ></i>
                             </div>
+
                             
                             {/* Status Badge Overlay */}
-                            <div className="position-absolute top-0 end-0 m-2">
+                            <div className="position-absolute top-0 end-0 m-2" style={{ zIndex: 10 }}>
                               <span
                                 className={`badge ${
                                   product.is_active ? 'bg-success' : 'bg-secondary'
@@ -874,7 +1289,7 @@ const ProductList = () => {
 
                             {/* Sale Badge */}
                             {product.on_sale && (
-                              <div className="position-absolute top-0 start-0 m-2">
+                              <div className="position-absolute top-0 start-0 m-2" style={{ zIndex: 10 }}>
                                 <span className="badge bg-danger" style={{ fontSize: '0.75rem' }}>
                                   Sale
                                 </span>
@@ -884,7 +1299,7 @@ const ProductList = () => {
                             {/* Action Buttons Overlay */}
                             <div
                               className="position-absolute bottom-0 end-0 m-2 d-flex gap-1 product-card-actions"
-                              style={{ opacity: 0, transition: 'opacity 0.3s ease' }}
+                              style={{ opacity: 0, transition: 'opacity 0.3s ease', zIndex: 10 }}
                             >
                               <button
                                 className="btn btn-warning btn-sm text-white"
@@ -1016,6 +1431,318 @@ const ProductList = () => {
                                 dangerouslySetInnerHTML={{ __html: product.subtitle }}
                               />
                             )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={product.id} className="col-12">
+                        <div className="card product-card shadow-sm border h-100 p-3" style={{ transition: 'all 0.3s ease' }}>
+                          <div className="d-flex flex-column flex-md-row gap-3 align-items-start">
+                            {/* Image Container */}
+                            <div className="flex-shrink-0" style={{ width: '200px', maxWidth: '100%' }}>
+                              {/* Thumbnail Image */}
+                              <div
+                                className="position-relative mb-2"
+                                style={{ width: '100%', height: '160px', backgroundColor: 'var(--background-light)', overflow: 'hidden', borderRadius: '8px', cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const gallery = buildGallery(product);
+                                  const featureIdx = getFeatureIndex(product.id, gallery.length);
+                                  const heroImage = gallery.length > 0 ? gallery[featureIdx] : thumbnailUrl;
+                                  openImageModal(heroImage, e, gallery, featureIdx);
+                                }}
+                              >
+                                {(() => {
+                                  const gallery = buildGallery(product);
+                                  const featureIdx = getFeatureIndex(product.id, gallery.length);
+                                  const heroImage = gallery.length > 0 ? gallery[featureIdx] : thumbnailUrl;
+                                  return heroImage ? (
+                                    <>
+                                      {/* Loading Skeleton - Show when image is not fully loaded */}
+                                      {imageLoadingMap[heroImage] !== false && (
+                                        <div
+                                          className="position-absolute w-100 h-100 skeleton-shimmer"
+                                          style={{
+                                            backgroundColor: '#E0E0E0',
+                                            background: 'linear-gradient(90deg, #E0E0E0 25%, #F5F5F5 50%, #E0E0E0 75%)',
+                                            backgroundSize: '200% 100%',
+                                            animation: 'shimmer 1.5s ease-in-out infinite',
+                                            zIndex: 1,
+                                            top: 0,
+                                            left: 0,
+                                          }}
+                                        />
+                                      )}
+                                      <img
+                                        key={`${product.id}-list-${imageCacheBuster}-${heroImage}`}
+                                        src={heroImage}
+                                        alt={product.title}
+                                        className="w-100 h-100"
+                                        style={{
+                                          objectFit: 'cover',
+                                          transition: 'opacity 0.3s ease',
+                                          opacity: imageLoadingMap[heroImage] === false ? 1 : 0,
+                                          position: 'relative',
+                                          zIndex: 2,
+                                        }}
+                                        onLoadStart={() => {
+                                          setImageLoadingMap(prev => ({
+                                            ...prev,
+                                            [heroImage]: true
+                                          }));
+                                        }}
+                                        onLoad={() => {
+                                          setImageLoadingMap(prev => ({
+                                            ...prev,
+                                            [heroImage]: false
+                                          }));
+                                        }}
+                                        onError={(e) => {
+                                          setImageLoadingMap(prev => ({ ...prev, [heroImage]: false }));
+                                          e.target.style.display = 'none';
+                                        }}
+                                      />
+                                    </>
+                                  ) : (
+                                    <div className="w-100 h-100 d-flex align-items-center justify-content-center">
+                                      <FaBox className="text-muted" size={32} />
+                                    </div>
+                                  );
+                                })()}
+                                <div className="position-absolute top-0 end-0 m-2 d-flex gap-1" style={{ zIndex: 10 }}>
+                                  <span className={`badge ${product.is_active ? 'bg-success' : 'bg-secondary'}`} style={{ fontSize: '0.7rem' }}>
+                                    {product.is_active ? 'Active' : 'Inactive'}
+                                  </span>
+                                  {product.on_sale && (
+                                    <span className="badge bg-danger" style={{ fontSize: '0.7rem' }}>
+                                      Sale
+                                    </span>
+                                  )}
+                                </div>
+                                {(() => {
+                                  const gallery = buildGallery(product);
+                                  if (gallery.length < 2) return null;
+                                  const featureIdx = getFeatureIndex(product.id, gallery.length);
+                                  return (
+                                    <div
+                                      className="position-absolute top-50 start-0 end-0 px-2 d-flex justify-content-between align-items-center"
+                                      style={{ transform: 'translateY(-50%)', zIndex: 10 }}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="hero-nav-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cycleFeature(product.id, gallery.length, -1);
+                                        }}
+                                      >
+                                        <FaChevronLeft />
+                                      </button>
+                                      <div className="hero-nav-indicator">
+                                        {featureIdx + 1}/{gallery.length}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="hero-nav-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cycleFeature(product.id, gallery.length, 1);
+                                        }}
+                                      >
+                                        <FaChevronRight />
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+
+                              {/* Feature Images Strip Below Thumbnail */}
+                              {featureImages.length > 0 && (
+                                <div
+                                  className="d-flex justify-content-center gap-2 flex-wrap p-2 rounded"
+                                  style={{ background: 'var(--background-light)', border: '1px solid var(--input-border)' }}
+                                >
+                                  {featureImages.slice(0, 6).map((img, idx) => {
+                                    const gallery = buildGallery(product);
+                                    const galleryIndex = gallery.findIndex(g => g === img);
+                                    const featureIdx = getFeatureIndex(product.id, gallery.length);
+                                    const isActive = galleryIndex >= 0 && galleryIndex === featureIdx;
+                                    return (
+                                      <div
+                                        key={`${product.id}-list-feature-${idx}-${imageCacheBuster}`}
+                                        style={{
+                                          width: '48px',
+                                          height: '48px',
+                                          borderRadius: '6px',
+                                          overflow: 'hidden',
+                                          border: isActive ? '3px solid var(--primary-color)' : '1px solid var(--input-border)',
+                                          backgroundColor: '#fff',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s ease',
+                                          boxShadow: isActive ? '0 0 0 3px rgba(0, 123, 255, 0.25)' : 'none',
+                                          transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                                          position: 'relative',
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Update the feature index to show this image
+                                          if (galleryIndex >= 0) {
+                                            cycleFeature(product.id, gallery.length, galleryIndex - featureIdx);
+                                          } else {
+                                            openImageModal(img, e, gallery, idx + 1);
+                                          }
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (!isActive) {
+                                            e.currentTarget.style.borderColor = 'var(--primary-color)';
+                                            e.currentTarget.style.opacity = '0.8';
+                                          }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!isActive) {
+                                            e.currentTarget.style.borderColor = 'var(--input-border)';
+                                            e.currentTarget.style.opacity = '1';
+                                          }
+                                        }}
+                                      >
+                                        {isActive && (
+                                          <div
+                                            style={{
+                                              position: 'absolute',
+                                              top: '2px',
+                                              right: '2px',
+                                              width: '10px',
+                                              height: '10px',
+                                              borderRadius: '50%',
+                                              backgroundColor: 'var(--primary-color)',
+                                              border: '2px solid #fff',
+                                              zIndex: 10,
+                                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                            }}
+                                          />
+                                        )}
+                                        <img
+                                          key={`${product.id}-list-feature-img-${idx}-${imageCacheBuster}-${img}`}
+                                          src={img}
+                                          alt={`feature-${idx}`}
+                                          className="w-100 h-100"
+                                          style={{ objectFit: 'cover' }}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Details */}
+                            <div className="flex-grow-1 w-100">
+                              <div className="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+                                <div>
+                                  <h6 className="mb-1 fw-semibold" style={{ color: 'var(--text-primary)', fontSize: '1.05rem' }}>
+                                    {product.title || 'Untitled product'}
+                                  </h6>
+                                  <div className="d-flex flex-wrap gap-2">
+                                    {product.category && (
+                                      <span className="badge bg-secondary" style={{ fontSize: '0.75rem' }}>
+                                        {product.category}
+                                      </span>
+                                    )}
+                                    {product.sku && (
+                                      <span className="badge bg-light text-muted border" style={{ fontSize: '0.75rem' }}>
+                                        SKU: {product.sku}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="d-flex gap-1">
+                                  <button
+                                    className="btn btn-warning btn-sm text-white"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingProduct(product);
+                                      setShowProductForm(true);
+                                    }}
+                                    disabled={isActionDisabled(product.id)}
+                                    title="Edit Product"
+                                  >
+                                    {actionLoading === product.id ? (
+                                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                                    ) : (
+                                      <FaEdit />
+                                    )}
+                                  </button>
+                                  <button
+                                    className="btn btn-danger btn-sm text-white"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(product.id);
+                                    }}
+                                    disabled={isActionDisabled(product.id)}
+                                    title="Delete Product"
+                                  >
+                                    {actionLoading === product.id ? (
+                                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                                    ) : (
+                                      <FaTrash />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                                <div>
+                                  <div className="text-muted small">Price</div>
+                                  <div className="fw-bold" style={{ color: 'var(--primary-color)', fontSize: '1.1rem' }}>
+                                    {formatCurrency(product.price)}
+                                  </div>
+                                </div>
+                                {product.old_price && (
+                                  <div>
+                                    <div className="text-muted small">Old price</div>
+                                    <div className="text-decoration-line-through text-muted">
+                                      {formatCurrency(product.old_price)}
+                                    </div>
+                                  </div>
+                                )}
+                                {(product.stock ?? product.quantity) !== undefined && (
+                                  <div>
+                                    <div className="text-muted small">Stock</div>
+                                    <div className="fw-semibold" style={{ color: 'var(--text-primary)' }}>
+                                      {product.stock ?? product.quantity}
+                                    </div>
+                                  </div>
+                                )}
+                                {product.created_at && (
+                                  <div>
+                                    <div className="text-muted small">Created</div>
+                                    <div className="small text-muted">{formatDateTime(product.created_at)}</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {product.subtitle && (
+                                <div className="mb-2">
+                                  <div className="text-muted small mb-1">Subtitle</div>
+                                  <div
+                                    className="small text-muted"
+                                    dangerouslySetInnerHTML={{ __html: product.subtitle }}
+                                  />
+                                </div>
+                              )}
+
+                              <div>
+                                <div className="text-muted small mb-1">Description</div>
+                                {product.description ? (
+                                  <div className="small" style={{ color: 'var(--text-secondary)' }}>
+                                    {getPlainText(product.description).slice(0, 260)}
+                                    {getPlainText(product.description).length > 260 ? '…' : ''}
+                                  </div>
+                                ) : (
+                                  <div className="text-muted small">No description provided.</div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1231,7 +1958,27 @@ const ProductList = () => {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Product Details Modal */}
+      {selectedProduct && showDetailModal && (
+        <ProductDetailsModal
+          product={selectedProduct}
+          onClose={() => {
+            setShowDetailModal(false);
+            setTimeout(() => setSelectedProduct(null), 250);
+          }}
+          buildGallery={buildGallery}
+          getFeatureIndex={getFeatureIndex}
+          cycleFeature={cycleFeature}
+          openImageModal={openImageModal}
+          formatCurrency={formatCurrency}
+          formatDateTime={formatDateTime}
+          normalizeFeatureImages={normalizeFeatureImages}
+          getPrimaryImage={getPrimaryImage}
+          getThumbnailOnly={getThumbnailOnly}
+          featureIndexMap={featureIndexMap}
+          setFeatureIndexMap={setFeatureIndexMap}
+        />
+      )}
       {showProductForm && (
         <ProductFormModal
           product={editingProduct}
@@ -1239,11 +1986,33 @@ const ProductList = () => {
             setShowProductForm(false);
             setEditingProduct(null);
           }}
-          onSave={(savedProduct) => {
+          onSave={async (savedProduct) => {
             // Always refetch to ensure UI matches DB (rich text, images, etc.)
-            fetchProducts();
+            // Clear image loading cache and update cache buster to force reload of updated images
+            setImageLoadingMap({});
+            const newCacheBuster = Date.now();
+            setImageCacheBuster(newCacheBuster);
+            
+            // Immediately update the product in state if we have the saved product data
+            if (savedProduct && savedProduct.id) {
+              setProducts(prevProducts => {
+                const updated = prevProducts.map(p => 
+                  p.id === savedProduct.id ? { ...savedProduct } : p
+                );
+                // If product not found, add it (for new products)
+                if (!updated.find(p => p.id === savedProduct.id)) {
+                  return [...updated, savedProduct];
+                }
+                return updated;
+              });
+            }
+            
+            // Close modal first
             setShowProductForm(false);
             setEditingProduct(null);
+            // Then fetch products with a small delay to ensure backend has processed the update
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await fetchProducts();
           }}
           token={token}
         />
@@ -1261,6 +2030,17 @@ const ProductList = () => {
         draggable
         pauseOnHover
         theme="light"
+      />
+
+      {/* Image Lightbox Component */}
+      <ImageLightbox
+        isOpen={showImageModal}
+        imageUrl={imageModalUrl}
+        imageGallery={imageModalGallery}
+        currentIndex={imageModalIndex ?? 0}
+        onClose={closeImageModal}
+        onNext={showNextImage}
+        onPrev={showPrevImage}
       />
     </div>
   );

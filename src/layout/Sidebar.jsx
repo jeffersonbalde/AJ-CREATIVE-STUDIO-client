@@ -79,12 +79,12 @@ const Sidebar = ({ onCloseSidebar }) => {
     {
       heading: "Product Management",
       items: [
-        {
-          icon: "fas fa-box",
-          label: "Products",
-          href: "/admin/products",
-          hasChildren: true,
-          children: [
+            {
+              icon: "fas fa-box",
+              label: "Products",
+              href: "/admin/products",
+              hasChildren: true,
+              children: [
             {
               icon: "fas fa-list",
               label: "All Products",
@@ -94,6 +94,16 @@ const Sidebar = ({ onCloseSidebar }) => {
               icon: "fas fa-tags",
               label: "Product Categories",
               href: "/admin/products/categories",
+            },
+            {
+              icon: "fas fa-layer-group",
+              label: "Collections",
+              href: "/admin/products/collections",
+            },
+            {
+              icon: "fas fa-columns",
+              label: "Landing Page Sections",
+              href: "/admin/landing-page-sections",
             },
           ],
         },

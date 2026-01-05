@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { getProductImage } from '../pages/Products';
 import { useCart } from '../contexts/CartContext';
+import { getProductImage, formatCurrency } from '../utils/productImageUtils';
 
 // Helper to match slug style used in Products.jsx
 const createSlug = (title) => {
@@ -16,99 +16,50 @@ const createSlug = (title) => {
     .trim();
 };
 
-const products = [
-  {
-    id: 1,
-    title: 'Digital To-Do List - V1 Blue',
-    oldPrice: '₱501.90',
-    newPrice: '₱413.12',
-    imageType: 'todo-list',
-    // Match solid blue palette from Products.jsx
-    color: '#2196F3',
-    accentColor: '#1565C0',
-  },
-  {
-    id: 2,
-    title: 'Digital Annual Planner - V1 Pink',
-    oldPrice: '₱520.00',
-    newPrice: '₱445.00',
-    imageType: 'planner',
-    // Match solid pink/red palette similar to Products.jsx
-    color: '#E91E63',
-    accentColor: '#C2185B',
-  },
-  {
-    id: 3,
-    title: 'Comprehensive Budget Tracker Spreadsheet with Advanced Financial Analytics and Monthly Reporting Features',
-    oldPrice: '₱450.00',
-    newPrice: '₱380.00',
-    imageType: 'budget',
-    // Match solid yellow/orange palette from Products.jsx
-    color: '#FFC107',
-    accentColor: '#F57C00',
-  },
-  {
-    id: 4,
-    title: 'Habit Tracker Template',
-    oldPrice: '₱480.00',
-    newPrice: '₱410.00',
-    imageType: 'habit-tracker',
-    // Match solid green palette from Products.jsx
-    color: '#4CAF50',
-    accentColor: '#2E7D32',
-  },
-  {
-    id: 5,
-    title: 'Productivity Dashboard',
-    oldPrice: '₱490.00',
-    newPrice: '₱420.00',
-    imageType: 'productivity',
-    // Match solid purple palette from Products.jsx
-    color: '#9C27B0',
-    accentColor: '#6A1B9A',
-  },
-  {
-    id: 6,
-    title: 'Social Media Calendar',
-    oldPrice: '₱470.00',
-    newPrice: '₱400.00',
-    imageType: 'social',
-    // Reuse solid purple palette
-    color: '#9C27B0',
-    accentColor: '#6A1B9A',
-  },
-  {
-    id: 7,
-    title: 'Weekly Meal Planner',
-    oldPrice: '₱460.00',
-    newPrice: '₱390.00',
-    imageType: 'meal-planner',
-    // Solid green palette
-    color: '#4CAF50',
-    accentColor: '#2E7D32',
-  },
-  {
-    id: 8,
-    title: 'Expense Tracker Sheet',
-    oldPrice: '₱475.00',
-    newPrice: '₱405.00',
-    imageType: 'expense',
-    // Match solid red palette similar to Products.jsx
-    color: '#F44336',
-    accentColor: '#C62828',
-  },
-];
+const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const MostPopular = () => {
   const navigate = useNavigate();
   const { addToCart, setCartOpen } = useCart();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [scrollDirection, setScrollDirection] = useState('down');
   const [visibleItems, setVisibleItems] = useState({});
   const lastScrollY = useRef(0);
   const sectionRef = useRef(null);
   const itemRefs = useRef({});
 
+  // Fetch bestsellers from API
   useEffect(() => {
+    const fetchBestsellers = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${apiBaseUrl}/products/bestsellers/list`, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.products) {
+            // Limit to 8 products for display
+            const limitedProducts = data.products.slice(0, 8);
+            setProducts(limitedProducts);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching bestsellers:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBestsellers();
+  }, []);
+
+  useEffect(() => {
+    if (products.length === 0) return;
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       const direction = currentScrollY > lastScrollY.current ? 'down' : 'up';
@@ -186,21 +137,32 @@ const MostPopular = () => {
           Our Best Sellers
         </motion.h2>
 
-        <motion.div
-          className="most-popular-grid"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: false, margin: '-100px' }}
-          transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
-          style={{
-            display: 'flex',
-            gap: '1.5rem',
-            flexWrap: 'wrap',
-            alignItems: 'stretch',
-          }}
-        >
-          <AnimatePresence>
-            {products.map((product, index) => (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        ) : products.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
+            <p>No best sellers available at the moment.</p>
+          </div>
+        ) : (
+          <motion.div
+            className="most-popular-grid"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              display: 'flex',
+              gap: '1.5rem',
+              flexWrap: 'wrap',
+              alignItems: 'stretch',
+            }}
+          >
+            <AnimatePresence>
+              {products.map((product, index) => (
               <motion.div
                 key={product.id}
                 id={`popular-item-${index}`}
@@ -254,11 +216,11 @@ const MostPopular = () => {
                     flex: 1,
                   }}
                 >
-                  {/* Header banner (exactly like Products.jsx) */}
+                  {/* Header banner */}
                   <div
                     className="green-header-banner"
                     style={{
-                      backgroundColor: product.color || '#4CAF50',
+                      backgroundColor: '#4CAF50',
                       padding: '0.75rem',
                       color: '#FFFFFF',
                     }}
@@ -278,7 +240,7 @@ const MostPopular = () => {
                     </div>
                   </div>
 
-                  {/* Image (exact same structure as Products.jsx) */}
+                  {/* Image */}
                   <div
                     style={{
                       position: 'relative',
@@ -287,7 +249,7 @@ const MostPopular = () => {
                       backgroundColor: '#F8F8F8',
                     }}
                   >
-                    {product.onSale && (
+                    {product.on_sale && (
                       <div
                         style={{
                           position: 'absolute',
@@ -306,11 +268,7 @@ const MostPopular = () => {
                       </div>
                     )}
                     <img
-                      src={getProductImage(
-                        product.imageType,
-                        product.color,
-                        product.accentColor,
-                      )}
+                      src={getProductImage(product)}
                       alt={product.title}
                       style={{
                         width: '100%',
@@ -386,15 +344,17 @@ const MostPopular = () => {
                         gap: '0.5rem',
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: '0.9rem',
-                          color: '#999',
-                          textDecoration: 'line-through',
-                        }}
-                      >
-                        {product.oldPrice}
-                      </span>
+                      {product.on_sale && product.old_price && (
+                        <span
+                          style={{
+                            fontSize: '0.9rem',
+                            color: '#999',
+                            textDecoration: 'line-through',
+                          }}
+                        >
+                          {formatCurrency(product.old_price)}
+                        </span>
+                      )}
                       <span
                         style={{
                           fontSize: '1rem',
@@ -402,7 +362,7 @@ const MostPopular = () => {
                           color: '#000',
                         }}
                       >
-                        {product.newPrice}
+                        {formatCurrency(product.price)}
                       </span>
                     </div>
 
@@ -427,19 +387,12 @@ const MostPopular = () => {
                         e.preventDefault();
                         e.stopPropagation();
                         
-                        // Convert price from string (₱413.12) to number (413.12)
-                        const priceNumber = parseFloat(product.newPrice.replace('₱', '').replace(/,/g, ''));
-                        
                         // Add product to cart
                         const productToAdd = {
                           id: product.id,
                           title: product.title,
-                          price: priceNumber,
-                          image: getProductImage(
-                            product.imageType,
-                            product.color,
-                            product.accentColor,
-                          ),
+                          price: parseFloat(product.price),
+                          image: getProductImage(product),
                         };
                         
                         addToCart(productToAdd);
@@ -452,9 +405,10 @@ const MostPopular = () => {
                   </div>
                 </Link>
               </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
 
         {/* View all Spreadsheets Button */}
         <motion.div
