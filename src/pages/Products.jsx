@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+import { getProductImage as getApiProductImage, formatCurrency } from '../utils/productImageUtils';
 
 // Helper function to convert title to URL-friendly slug
 const createSlug = (title) => {
@@ -14,7 +15,7 @@ const createSlug = (title) => {
     .trim();
 };
 
-// Sample products data - in a real app, this would come from an API
+// Sample products data - kept only as design fallback, main data now comes from API
 export const allProducts = [
 
   {
@@ -397,6 +398,11 @@ export const getProductImage = (imageType, bgColor, accentColor) => {
 };
 
 const Products = () => {
+  const [products, setProducts] = useState([]); // live products from API
+  const [loading, setLoading] = useState(true);
+  const [imageLoading, setImageLoading] = useState({});
+  const [collections, setCollections] = useState([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
     priceFrom: '',
@@ -409,14 +415,135 @@ const Products = () => {
   const [filterView, setFilterView] = useState('main'); // 'main' | 'price' | 'category'
   const productsPerPage = 8;
 
-  // Category counts and list
+  const apiBaseUrl =
+    import.meta.env.VITE_LARAVEL_API ||
+    import.meta.env.VITE_API_URL ||
+    'http://localhost:8000';
+
+  // Data source: use live products from API only
+  const sourceProducts = products;
+
+  // Fetch products from API on mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${apiBaseUrl}/products?per_page=1000`, {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          console.error('Failed to fetch products for public listing', response.status);
+          setProducts([]);
+          return;
+        }
+
+        const data = await response.json();
+        let list = [];
+        if (Array.isArray(data.products)) {
+          list = data.products;
+        } else if (Array.isArray(data.data)) {
+          list = data.data;
+        }
+
+        const normalized = list.map((p) => {
+          const title = p.title || p.name || '';
+          const price = parseFloat(p.price ?? 0);
+          return {
+            ...p,
+            title,
+            price,
+            oldPrice: p.old_price ?? null,
+            onSale: !!p.on_sale,
+            category: p.category || 'Uncategorized',
+            availability: p.is_active === false ? 'Unavailable' : 'In Stock',
+            slug: p.slug || createSlug(title),
+          };
+        });
+
+        setProducts(normalized);
+      } catch (error) {
+        console.error('Error fetching products for public listing:', error);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [apiBaseUrl]);
+
+  // Fetch collections with products for storefront filters
+  useEffect(() => {
+    const fetchCollections = async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/public/product-collections`,
+          {
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          console.error(
+            'Failed to fetch public product collections',
+            response.status
+          );
+          setCollections([]);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success && Array.isArray(data.collections)) {
+          // Normalize collection products for consistent display
+          const normalizedCollections = data.collections.map((c) => {
+            const normalizedProducts = Array.isArray(c.products)
+              ? c.products.map((p) => {
+                  const title = p.title || p.name || '';
+                  const price = parseFloat(p.price ?? 0);
+                  return {
+                    ...p,
+                    title,
+                    price,
+                    oldPrice: p.old_price ?? null,
+                    onSale: !!p.on_sale,
+                    category: p.category || 'Uncategorized',
+                    availability: p.is_active === false ? 'Unavailable' : 'In Stock',
+                    slug: p.slug || createSlug(title),
+                  };
+                })
+              : [];
+            return {
+              ...c,
+              products: normalizedProducts,
+            };
+          });
+          setCollections(normalizedCollections);
+        } else {
+          setCollections([]);
+        }
+      } catch (error) {
+        console.error('Error fetching public product collections:', error);
+        setCollections([]);
+      }
+    };
+
+    fetchCollections();
+  }, [apiBaseUrl]);
+
+  // Category counts and list (only categories that actually have products)
   const categoryCounts = useMemo(() => {
     const counts = {};
-    allProducts.forEach(p => {
+    sourceProducts.forEach((p) => {
+      if (!p.category) return;
       counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, []);
+  }, [sourceProducts]);
 
   const allCategories = useMemo(
     () => Object.keys(categoryCounts).sort(),
@@ -425,13 +552,40 @@ const Products = () => {
 
   // Highest price
   const highestPrice = useMemo(
-    () => Math.max(...allProducts.map(p => p.price), 0),
-    []
+    () => (sourceProducts.length ? Math.max(...sourceProducts.map((p) => p.price || 0), 0) : 0),
+    [sourceProducts]
   );
 
   // Filter + sort
   const filteredAndSortedProducts = useMemo(() => {
-    let filtered = [...allProducts];
+    // If a collection is selected and it has products, prefer those products directly
+    if (selectedCollectionId && collections.length > 0) {
+      const collection = collections.find(
+        (c) => String(c.id) === String(selectedCollectionId)
+      );
+      if (collection && Array.isArray(collection.products) && collection.products.length > 0) {
+        const normalized = collection.products.map((p) => ({
+          ...p,
+          oldPrice: p.old_price ?? p.oldPrice ?? null,
+          onSale: p.onSale ?? !!p.on_sale,
+          availability:
+            p.availability ?? (p.is_active === false ? 'Unavailable' : 'In Stock'),
+        }));
+        return normalized;
+      } else if (collection) {
+        // Fallback: filter main products by the collection's product IDs if products were not eager loaded
+        const productIds = new Set(
+          Array.isArray(collection.products)
+            ? collection.products.map((p) => String(p.id))
+            : []
+        );
+        const filtered = sourceProducts.filter((p) => productIds.has(String(p.id)));
+        return filtered;
+      }
+      return [];
+    }
+
+    let filtered = [...sourceProducts];
 
     if (filters.categories.length > 0) {
       filtered = filtered.filter(p => filters.categories.includes(p.category));
@@ -473,7 +627,7 @@ const Products = () => {
     }
 
     return filtered;
-  }, [filters, sortBy]);
+  }, [filters, sortBy, sourceProducts]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedProducts.length / productsPerPage);
@@ -490,6 +644,7 @@ const Products = () => {
 
   const handleRemoveAll = () => {
     setFilters({ priceFrom: '', priceTo: '', categories: [] });
+    setSelectedCollectionId(null);
     setSortBy('Featured');
     setCurrentPage(1);
     setFilterView('main');
@@ -516,6 +671,17 @@ const Products = () => {
   };
 
   const selectedCategoryCount = filters.categories.length;
+
+  const handleCollectionChange = (value) => {
+    if (value === '' || value === 'all') {
+      setSelectedCollectionId(null);
+    } else {
+      const id = parseInt(value, 10);
+      setSelectedCollectionId(Number.isNaN(id) ? null : id);
+    }
+    setSortBy('Featured');
+    setCurrentPage(1);
+  };
 
   const handleApplyFilters = () => {
     setCurrentPage(1);
@@ -609,7 +775,7 @@ const Products = () => {
               Filter and sort
             </h2>
             <p style={{ fontSize: '0.875rem', color: '#666', margin: 0 }}>
-              {filteredAndSortedProducts.length} of {allProducts.length} products
+              {filteredAndSortedProducts.length} of {sourceProducts.length} products
             </p>
           </div>
           <button
@@ -1025,8 +1191,8 @@ const Products = () => {
               </span>
             </div>
             <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
+              value={selectedCollectionId || 'all'}
+              onChange={e => handleCollectionChange(e.target.value)}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -1037,14 +1203,16 @@ const Products = () => {
                 backgroundColor: '#FFFFFF',
               }}
             >
-              <option value="Featured">Featured</option>
-              <option value="Best selling">Best selling</option>
-              <option value="Alphabetically, A-Z">Alphabetically, A-Z</option>
-              <option value="Alphabetically, Z-A">Alphabetically, Z-A</option>
-              <option value="Price, low to high">Price, low to high</option>
-              <option value="Price, high to low">Price, high to low</option>
-              <option value="Date, old to new">Date, old to new</option>
-              <option value="Date, new to old">Date, new to old</option>
+              <option value="all">All collections</option>
+              {collections.length > 0 &&
+                collections.map((collection) => (
+                  <option
+                    key={collection.id}
+                    value={collection.id}
+                  >
+                    {collection.name}
+                  </option>
+                ))}
             </select>
           </div>
         </div>
@@ -1170,7 +1338,7 @@ const Products = () => {
               <span className="filter-sort-text">Filter and sort</span>
             </button>
             <span style={{ fontSize: '0.95rem', color: '#666' }}>
-              {filteredAndSortedProducts.length} of {allProducts.length} products
+              {filteredAndSortedProducts.length} of {sourceProducts.length} products
             </span>
           </div>
 
@@ -1560,14 +1728,11 @@ const Products = () => {
               <span
                 style={{ fontSize: '0.95rem', color: '#333', fontWeight: 500 }}
               >
-                Sort by:
+                Browse by collection:
               </span>
               <select
-                value={sortBy}
-                onChange={e => {
-                  setSortBy(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={selectedCollectionId || 'all'}
+                onChange={e => handleCollectionChange(e.target.value)}
                 style={{
                   padding: '0.5rem 1rem',
                   border: '1px solid #CCCCCC',
@@ -1575,24 +1740,22 @@ const Products = () => {
                   fontSize: '0.95rem',
                   cursor: 'pointer',
                   backgroundColor: '#FFFFFF',
+                  minWidth: '200px',
                 }}
               >
-                <option value="Featured">Featured</option>
-                <option value="Best selling">Best selling</option>
-                <option value="Alphabetically, A-Z">
-                  Alphabetically, A-Z
-                </option>
-                <option value="Alphabetically, Z-A">
-                  Alphabetically, Z-A
-                </option>
-                <option value="Price, low to high">Price, low to high</option>
-                <option value="Price, high to low">Price, high to low</option>
-                <option value="Date, old to new">Date, old to new</option>
-                <option value="Date, new to old">Date, new to old</option>
+                <option value="all">All collections</option>
+                {collections.length > 0 &&
+                  collections.map((collection) => (
+                    <option
+                      key={collection.id}
+                      value={collection.id}
+                    >
+                      {collection.name}
+                    </option>
+                  ))}
               </select>
               <span style={{ fontSize: '0.95rem', color: '#666' }}>
-                {filteredAndSortedProducts.length} of {allProducts.length}{' '}
-                products
+                {filteredAndSortedProducts.length} of {sourceProducts.length} products
               </span>
             </div>
           </div>
@@ -1743,8 +1906,81 @@ const Products = () => {
             </div>
           )}
 
-          {/* No products message or grid */}
-          {filteredAndSortedProducts.length === 0 ? (
+          {/* Loading state, no products, or grid */}
+          {loading ? (
+            <div
+              className="products-grid loading"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gap: '1rem',
+                marginBottom: '3rem',
+              }}
+            >
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="product-card-skeleton"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    border: '1px solid #E0E0E0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  {/* Header skeleton */}
+                  <div
+                    style={{
+                      height: '44px',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                  {/* Image skeleton */}
+                  <div
+                    style={{
+                      width: '100%',
+                      aspectRatio: '4/3',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                  {/* Text skeleton */}
+                  <div style={{ padding: '0.75rem' }}>
+                    <div
+                      style={{
+                        height: '14px',
+                        width: '70%',
+                        marginBottom: '0.5rem',
+                        borderRadius: '6px',
+                        background:
+                          'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <div
+                      style={{
+                        height: '16px',
+                        width: '40%',
+                        borderRadius: '6px',
+                        background:
+                          'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredAndSortedProducts.length === 0 ? (
             <div
               style={{
                 display: 'flex',
@@ -1866,6 +2102,7 @@ const Products = () => {
                           width: '100%',
                           aspectRatio: '4/3',
                           backgroundColor: '#F8F8F8',
+                          overflow: 'hidden',
                         }}
                       >
                         {product.onSale && (
@@ -1886,20 +2123,71 @@ const Products = () => {
                             Sale
                           </div>
                         )}
-                        <img
-                          src={getProductImage(
-                            product.imageType,
-                            product.color,
-                            product.accentColor
-                          )}
-                          alt={product.title}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            display: 'block',
-                          }}
-                        />
+                        {(() => {
+                          const imageUrl =
+                            getApiProductImage(product) ||
+                            getProductImage(
+                              product.imageType,
+                              product.color,
+                              product.accentColor
+                            );
+
+                          if (!imageUrl) {
+                            return null;
+                          }
+
+                          const isLoaded = imageLoading[imageUrl] === false;
+
+                          return (
+                            <>
+                              {/* Shimmer overlay while image is loading */}
+                              {!isLoaded && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background:
+                                      'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                                    backgroundSize: '200% 100%',
+                                    animation:
+                                      'shimmer 1.5s ease-in-out infinite',
+                                    zIndex: 1,
+                                  }}
+                                />
+                              )}
+                              <img
+                                src={imageUrl}
+                                alt={product.title}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                  opacity: isLoaded ? 1 : 0,
+                                  transition: 'opacity 0.3s ease',
+                                }}
+                                onLoadStart={() => {
+                                  setImageLoading((prev) => ({
+                                    ...prev,
+                                    [imageUrl]: true,
+                                  }));
+                                }}
+                                onLoad={() => {
+                                  setImageLoading((prev) => ({
+                                    ...prev,
+                                    [imageUrl]: false,
+                                  }));
+                                }}
+                                onError={() => {
+                                  setImageLoading((prev) => ({
+                                    ...prev,
+                                    [imageUrl]: false,
+                                  }));
+                                }}
+                              />
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Feature bar */}

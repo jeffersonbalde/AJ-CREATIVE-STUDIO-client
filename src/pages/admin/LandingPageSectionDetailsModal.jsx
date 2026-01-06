@@ -1,59 +1,14 @@
 import React, { useState, useEffect } from "react";
 import Portal from "../../components/Portal";
-import { FaBox, FaLayerGroup, FaCheckCircle, FaTimesCircle, FaCalendarAlt } from "react-icons/fa";
+import { FaLayerGroup, FaCalendarAlt, FaBox } from "react-icons/fa";
 
-const CollectionDetailsModal = ({ 
-  collection, 
+const LandingPageSectionDetailsModal = ({ 
+  section, 
   onClose,
-  token,
-  prefetchedCollection = null,
-  prefetchedProducts = [],
+  collections = [],
+  products = [],
 }) => {
   const [isClosing, setIsClosing] = useState(false);
-  const [collectionData, setCollectionData] = useState(prefetchedCollection);
-  const [products, setProducts] = useState(prefetchedProducts || []);
-  const [loading, setLoading] = useState(!prefetchedCollection);
-
-  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-  useEffect(() => {
-    // If we already have prefetched data, use it and skip network
-    if (prefetchedCollection) {
-      setCollectionData(prefetchedCollection);
-      setProducts(prefetchedProducts || []);
-      setLoading(false);
-      return;
-    }
-
-    // Fallback: fetch details when not prefetched
-    const fetchCollectionDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.collection) {
-            setCollectionData(data.collection);
-            setProducts(data.collection.products || []);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching collection details:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (collection && !prefetchedCollection) {
-      fetchCollectionDetails();
-    }
-  }, [collection, prefetchedCollection, prefetchedProducts, apiBaseUrl, token]);
 
   const handleBackdropClick = async (e) => {
     if (e.target === e.currentTarget) {
@@ -84,7 +39,14 @@ const CollectionDetailsModal = ({
     onClose();
   };
 
-  if (!collection) return null;
+  if (!section) return null;
+
+  const displayData = section;
+  const collection = collections.find(c => 
+    c.slug === displayData.source_value || 
+    c.id?.toString() === displayData.source_value?.toString() ||
+    c.id === displayData.source_value
+  );
 
   return (
     <Portal>
@@ -167,7 +129,7 @@ const CollectionDetailsModal = ({
               style={{ background: "linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%)" }}
             >
               <h5 className="modal-title fw-bold">
-                <i className="fas fa-layer-group me-2"></i>Collection Details
+                <i className="fas fa-layer-group me-2"></i>Section Details
               </h5>
               <button 
                 type="button" 
@@ -178,15 +140,8 @@ const CollectionDetailsModal = ({
             </div>
             
             <div className="modal-body bg-light modal-smooth" style={{ maxHeight: "70vh", overflowY: "auto" }}>
-              {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Collection Header Card */}
+              
+                  {/* Section Header Card */}
                   <div className="card border-0 bg-white mb-4">
                     <div className="card-body">
                       <div className="row align-items-center">
@@ -204,58 +159,70 @@ const CollectionDetailsModal = ({
                           </div>
                         </div>
                         <div className="col">
-                          <h4 className="mb-1 text-dark">{collectionData?.name || collection.name}</h4>
+                          <h4 className="mb-1 text-dark">{displayData.title || 'Untitled Section'}</h4>
                           <div className="d-flex flex-wrap gap-2 mt-2">
-                            <span className={`badge ${collectionData?.is_active ? 'bg-success' : 'bg-secondary'} fs-6`}>
-                              <i className={`fas ${collectionData?.is_active ? 'fa-check-circle' : 'fa-times-circle'} me-1`}></i>
-                              {collectionData?.is_active ? 'Active' : 'Inactive'}
+                            <span className={`badge ${displayData.is_active ? 'bg-success' : 'bg-secondary'} fs-6`}>
+                              <i className={`fas ${displayData.is_active ? 'fa-check-circle' : 'fa-times-circle'} me-1`}></i>
+                              {displayData.is_active ? 'Active' : 'Inactive'}
                             </span>
-                            {collectionData?.display_order !== null && collectionData?.display_order !== undefined && (
+                            {displayData.display_order !== null && displayData.display_order !== undefined && (
                               <span className="badge bg-info fs-6">
                                 <i className="fas fa-sort-numeric-down me-1"></i>
-                                Order: {collectionData.display_order}
+                                Order: {displayData.display_order}
                               </span>
                             )}
+                            <span className="badge bg-secondary fs-6 text-capitalize">
+                              <i className="fas fa-th me-1"></i>
+                              {displayData.display_style || 'grid'}
+                            </span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Collection Information */}
+                  {/* Section Information */}
                   <div className="card border-0 bg-white mb-4">
                     <div className="card-header bg-transparent border-bottom">
                       <h6 className="mb-0 fw-semibold text-dark">
-                        <i className="fas fa-info-circle me-2 text-primary"></i>Collection Information
+                        <i className="fas fa-info-circle me-2 text-primary"></i>Section Information
                       </h6>
                     </div>
                     <div className="card-body">
                       <div className="row">
                         <div className="col-md-6 mb-3">
-                          <label className="form-label small fw-semibold text-muted mb-1">Collection Name</label>
-                          <p className="mb-0 fw-semibold text-dark">{collectionData?.name || collection.name}</p>
+                          <label className="form-label small fw-semibold text-muted mb-1">Section Title</label>
+                          <p className="mb-0 fw-semibold text-dark">{displayData.title || 'Untitled Section'}</p>
                         </div>
                         <div className="col-md-6 mb-3">
                           <label className="form-label small fw-semibold text-muted mb-1">Status</label>
                           <p className="mb-0">
-                            <span className={`badge ${collectionData?.is_active ? 'bg-success' : 'bg-secondary'}`}>
-                              {collectionData?.is_active ? 'Active' : 'Inactive'}
+                            <span className={`badge ${displayData.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                              {displayData.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </p>
                         </div>
-                        {collectionData?.display_order !== null && collectionData?.display_order !== undefined && (
+                        {displayData.display_order !== null && displayData.display_order !== undefined && (
                           <div className="col-md-6 mb-3">
                             <label className="form-label small fw-semibold text-muted mb-1">Display Order</label>
-                            <p className="mb-0 text-dark">{collectionData.display_order}</p>
+                            <p className="mb-0 text-dark">{displayData.display_order}</p>
                           </div>
                         )}
-                        {collectionData?.created_at && (
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label small fw-semibold text-muted mb-1">Display Style</label>
+                          <p className="mb-0 text-dark text-capitalize">{displayData.display_style || 'grid'}</p>
+                        </div>
+                        <div className="col-md-6 mb-3">
+                          <label className="form-label small fw-semibold text-muted mb-1">Product Count</label>
+                          <p className="mb-0 text-dark">{displayData.product_count || 4}</p>
+                        </div>
+                        {displayData.created_at && (
                           <div className="col-md-6 mb-3">
                             <label className="form-label small fw-semibold text-muted mb-1">
                               <FaCalendarAlt className="me-1" />Created At
                             </label>
                             <p className="mb-0 text-dark">
-                              {new Date(collectionData.created_at).toLocaleDateString('en-US', {
+                              {new Date(displayData.created_at).toLocaleDateString('en-US', {
                                 year: 'numeric',
                                 month: 'long',
                                 day: 'numeric',
@@ -265,28 +232,55 @@ const CollectionDetailsModal = ({
                             </p>
                           </div>
                         )}
-                        {collectionData?.description && (
+                        {displayData.description && (
                           <div className="col-md-12 mt-3">
                             <label className="form-label small fw-semibold text-muted mb-1">Description</label>
-                            <p className="mb-0 text-dark">{collectionData.description}</p>
+                            <p className="mb-0 text-dark">{displayData.description}</p>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Products in Collection */}
+                  {/* Collection Information */}
+                  {collection && (
+                    <div className="card border-0 bg-white mb-4">
+                      <div className="card-header bg-transparent border-bottom">
+                        <h6 className="mb-0 fw-semibold text-dark">
+                          <i className="fas fa-box me-2 text-primary"></i>Product Collection
+                        </h6>
+                      </div>
+                      <div className="card-body">
+                        <div className="row">
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label small fw-semibold text-muted mb-1">Collection Name</label>
+                            <p className="mb-0 fw-semibold text-dark">{collection.name || collection.title || `Collection ${collection.id}`}</p>
+                          </div>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label small fw-semibold text-muted mb-1">Collection Status</label>
+                            <p className="mb-0">
+                              <span className={`badge ${collection.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                                {collection.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Products in Section */}
                   <div className="card border-0 bg-white" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                     <div className="card-header bg-transparent border-bottom">
                       <h6 className="mb-0 fw-semibold text-dark">
-                        <i className="fas fa-box me-2 text-primary"></i>Products in Collection ({products.length})
+                        <i className="fas fa-box me-2 text-primary"></i>Products in Section ({products.length})
                       </h6>
                     </div>
                     <div className="card-body" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                       {products.length === 0 ? (
                         <div className="text-center py-4">
                           <FaBox className="text-muted mb-2" size={48} />
-                          <p className="text-muted mb-0">No products in this collection yet.</p>
+                          <p className="text-muted mb-0">No products found in this section.</p>
                         </div>
                       ) : (
                         <div className="products-container-mobile">
@@ -300,8 +294,8 @@ const CollectionDetailsModal = ({
                                 #{index + 1}
                               </div>
                               <div className="flex-grow-1 product-info-mobile">
-                                <div className="fw-semibold product-title-mobile" title={product.title}>
-                                  {product.title}
+                                <div className="fw-semibold product-title-mobile" title={product.title || product.name}>
+                                  {product.title || product.name}
                                 </div>
                                 <small className="text-muted d-block mt-1">
                                   {product.category && (
@@ -325,8 +319,7 @@ const CollectionDetailsModal = ({
                       )}
                     </div>
                   </div>
-                </>
-              )}
+                
             </div>
             
             <div className="modal-footer border-top bg-white modal-smooth">
@@ -341,4 +334,5 @@ const CollectionDetailsModal = ({
   );
 };
 
-export default CollectionDetailsModal;
+export default LandingPageSectionDetailsModal;
+

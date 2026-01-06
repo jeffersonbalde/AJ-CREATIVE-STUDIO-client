@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { allProducts, getProductImage } from './Products';
+import { allProducts } from './Products';
+import { getProductImage as getApiProductImage } from '../utils/productImageUtils';
 import gcashLogo from '../assets/images/gcash-logo.jpg';
 import mayaLogo from '../assets/images/maya-logo.png';
 import grabPayLogo from '../assets/images/grabpay-logo.png';
@@ -85,6 +86,17 @@ const generateShortDescription = (product) => {
     intro: shortIntros[category] || shortIntros['Business'],
     features: featureLists[category] || featureLists['Business'],
   };
+};
+
+// Helper to ensure we can match slugs for API products too
+const createSlug = (title) => {
+  return (title || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim();
 };
 
 // Generate dynamic description content based on product
@@ -213,6 +225,14 @@ const ProductDetail = () => {
   const { addToCart, setCartOpen } = useCart();
   
   const reviewsPerPage = 5;
+
+  const apiBaseUrl =
+    import.meta.env.VITE_LARAVEL_API ||
+    import.meta.env.VITE_API_URL ||
+    'http://localhost:8000';
+
+  const [product, setProduct] = useState(null);
+  const [loadingProduct, setLoadingProduct] = useState(true);
   
   // Check if mobile on mount and resize
   useEffect(() => {
@@ -288,12 +308,65 @@ const ProductDetail = () => {
     };
   }, [sortDropdownOpen, displayNameExampleDropdownOpen]);
   
-  let product = allProducts.find((p) => p.slug === slug);
+  // Fetch product from API (fall back only to dummy product if not found)
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoadingProduct(true);
 
-  // If product not found, create a dummy product
-  if (!product) {
-    product = createDummyProduct(slug);
-  }
+        // Fetch all products and match by slug
+        const response = await fetch(`${apiBaseUrl}/products?per_page=1000`, {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        let apiProduct = null;
+
+        if (response.ok) {
+          const data = await response.json();
+          let list = [];
+          if (Array.isArray(data.products)) {
+            list = data.products;
+          } else if (Array.isArray(data.data)) {
+            list = data.data;
+          }
+
+          const normalized = list.map((p) => {
+            const title = p.title || p.name || '';
+            const price = parseFloat(p.price ?? 0);
+            const slugValue = p.slug || createSlug(title);
+            return {
+              ...p,
+              title,
+              price,
+              oldPrice: p.old_price ?? null,
+              onSale: !!p.on_sale,
+              category: p.category || 'Digital',
+              availability: p.is_active === false ? 'Unavailable' : 'In Stock',
+              slug: slugValue,
+            };
+          });
+
+          apiProduct = normalized.find((p) => p.slug === slug);
+        }
+
+        if (apiProduct) {
+          setProduct(apiProduct);
+        } else {
+          // Fallback: create generic dummy product
+          setProduct(createDummyProduct(slug));
+        }
+      } catch (error) {
+        console.error('Error fetching product detail:', error);
+        setProduct(createDummyProduct(slug));
+      } finally {
+        setLoadingProduct(false);
+      }
+    };
+
+    fetchProduct();
+  }, [apiBaseUrl, slug]);
 
   const toggleFaq = (index) => {
     setExpandedFaq(expandedFaq === index ? null : index);
@@ -307,18 +380,21 @@ const ProductDetail = () => {
     { name: '7-Eleven', src: sevenElevenLogo },
   ];
 
-  // Product images array for gallery - using all sample images
-  const productImages = [
-    { src: productImage1, alt: `${product.title} - Image 1` },
-    { src: productImage2, alt: `${product.title} - Image 2` },
-    { src: productImage3, alt: `${product.title} - Image 3` },
-    { src: productImage4, alt: `${product.title} - Image 4` },
-    { src: productImage5, alt: `${product.title} - Image 5` },
-    { src: productImage6, alt: `${product.title} - Image 6` },
-    { src: productImage7, alt: `${product.title} - Image 7` },
-    { src: productImage8, alt: `${product.title} - Image 8` },
-    { src: productImage9, alt: `${product.title} - Image 9` },
-  ];
+  // Product images array for gallery - prefer real product image from API, fallback to samples
+  const mainImage = product ? getApiProductImage(product) : null;
+  const productImages = mainImage
+    ? [{ src: mainImage, alt: product.title }]
+    : [
+        { src: productImage1, alt: `${product?.title || ''} - Image 1` },
+        { src: productImage2, alt: `${product?.title || ''} - Image 2` },
+        { src: productImage3, alt: `${product?.title || ''} - Image 3` },
+        { src: productImage4, alt: `${product?.title || ''} - Image 4` },
+        { src: productImage5, alt: `${product?.title || ''} - Image 5` },
+        { src: productImage6, alt: `${product?.title || ''} - Image 6` },
+        { src: productImage7, alt: `${product?.title || ''} - Image 7` },
+        { src: productImage8, alt: `${product?.title || ''} - Image 8` },
+        { src: productImage9, alt: `${product?.title || ''} - Image 9` },
+      ];
   
   const handleImageChange = (index) => {
     setCurrentImageIndex(index);
@@ -408,6 +484,21 @@ const ProductDetail = () => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (loadingProduct || !product) {
+    return (
+      <>
+        <section style={{ padding: '3rem 1rem 4rem', backgroundColor: '#FFFFFF' }} className="product-detail-section">
+          <div style={{ maxWidth: '1100px', margin: '0 auto', textAlign: 'center' }}>
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </section>
+        <EmailSubscribeFooter />
+      </>
+    );
+  }
 
   return (
     <>
@@ -800,7 +891,7 @@ const ProductDetail = () => {
                     id: product.id,
                     title: product.title,
                     price: product.price,
-                    image: getProductImage(product),
+                    image: getApiProductImage(product),
                   };
                   
                   addToCart(productToAdd);

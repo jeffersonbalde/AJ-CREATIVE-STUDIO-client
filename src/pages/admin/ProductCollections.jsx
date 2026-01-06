@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaTimes, FaLayerGroup, FaCheckCircle, FaExclamationTriangle, FaSyncAlt, FaChevronLeft, FaChevronRight, FaBox } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
@@ -32,6 +32,7 @@ const ProductCollections = () => {
   const [editingCollection, setEditingCollection] = useState(null);
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [collectionDetails, setCollectionDetails] = useState({});
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -102,6 +103,44 @@ const ProductCollections = () => {
     }
   };
 
+  const fetchCollectionDetailsBulk = useCallback(async (list) => {
+    if (!Array.isArray(list) || list.length === 0) return;
+
+    const detailsMap = {};
+
+    await Promise.all(
+      list.map(async (coll) => {
+        try {
+          const response = await fetch(`${apiBaseUrl}/product-collections/${coll.id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          if (data.success && data.collection) {
+            const products = data.collection.products || [];
+            detailsMap[coll.id] = {
+              collection: data.collection,
+              products,
+            };
+          }
+        } catch (err) {
+          console.error('Error fetching collection detail', coll.id, err);
+        }
+      })
+    );
+
+    setCollectionDetails(detailsMap);
+  }, [apiBaseUrl, token]);
+
+  useEffect(() => {
+    if (collections.length > 0) {
+      fetchCollectionDetailsBulk(collections);
+    }
+  }, [collections, fetchCollectionDetailsBulk]);
+
   const filterAndSortCollections = () => {
     let filtered = [...collections];
 
@@ -152,6 +191,9 @@ const ProductCollections = () => {
     try {
       setActionLoading(id);
       setActionLock(true);
+      
+      // Show loading indicator
+      showAlert.loading('Deleting collection...');
 
       const response = await fetch(`${apiBaseUrl}/product-collections/${id}`, {
         method: 'DELETE',
@@ -162,14 +204,17 @@ const ProductCollections = () => {
       });
 
       if (response.ok) {
+        showAlert.close();
         toast.success('Collection deleted successfully');
         fetchCollections();
       } else {
+        showAlert.close();
         const errorData = await response.json();
         toast.error(errorData.message || 'Failed to delete collection');
       }
     } catch (error) {
       console.error('Error deleting collection:', error);
+      showAlert.close();
       toast.error('Error deleting collection');
     } finally {
       setActionLoading(null);
@@ -1115,6 +1160,8 @@ const ProductCollections = () => {
           collection={selectedCollection}
           onClose={handleCloseDetail}
           token={token}
+          prefetchedCollection={collectionDetails[selectedCollection.id]?.collection}
+          prefetchedProducts={collectionDetails[selectedCollection.id]?.products}
         />
       )}
 

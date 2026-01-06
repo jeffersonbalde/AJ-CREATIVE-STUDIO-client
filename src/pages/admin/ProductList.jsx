@@ -196,9 +196,10 @@ const ProductList = () => {
 
 
   useEffect(() => {
+    if (!token) return;
     fetchProducts();
     fetchCategories();
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     filterAndSortProducts();
@@ -251,6 +252,11 @@ const ProductList = () => {
         // Add cache control to prevent browser from caching the API response
         cache: 'no-cache',
       });
+
+      if (response.status === 401) {
+        toast.error('Session expired. Please sign in again.');
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -363,6 +369,12 @@ const ProductList = () => {
           'Accept': 'application/json',
         },
       });
+
+      if (response.status === 401) {
+        toast.error('Session expired. Please sign in again.');
+        setCategories([]);
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();

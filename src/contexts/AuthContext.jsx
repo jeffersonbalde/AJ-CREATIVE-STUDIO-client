@@ -41,11 +41,15 @@ export const AuthProvider = ({ children }) => {
           console.log('AuthContext - Setting user:', JSON.stringify(data.user, null, 2));
           setUser(data.user);
           setIsAuthenticated(true);
-        } else {
-          // Token is invalid
+        } else if (response.status === 401 || response.status === 403) {
+          // Token invalid/expired – clear it
           localStorage.removeItem('token');
           localStorage.removeItem('admin_token');
           setUser(null);
+          setIsAuthenticated(false);
+        } else {
+          // Non-auth errors (e.g., network/API down) – do NOT wipe token, allow retry
+          console.warn('Auth check failed but token kept. Status:', response.status);
           setIsAuthenticated(false);
         }
       } else {
@@ -54,9 +58,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('admin_token');
-      setUser(null);
+      // Keep token so we can retry if this was just a transient error
       setIsAuthenticated(false);
     } finally {
       setLoading(false);

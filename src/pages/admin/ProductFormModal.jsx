@@ -737,6 +737,8 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
       
       // Show error message using showAlert to ensure it appears above modal
       const errorMessages = Object.values(validationErrors).filter(msg => msg).join(', ');
+      console.log('Validation errors:', validationErrors, 'Error messages:', errorMessages);
+      
       if (errorMessages) {
         showAlert.error(
           'Validation Error',
@@ -745,6 +747,11 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
             .map(([field, msg]) => `• ${field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ')}: ${msg}`)
             .join('\n')}`
         );
+      } else {
+        // Fallback - show toast with field names
+        const errorFields = Object.keys(validationErrors).join(', ');
+        console.warn('Validation failed but no error messages. Fields with errors:', errorFields);
+        toast.error(`Please fix the errors in: ${errorFields || 'the form'}`);
       }
       return;
     }
@@ -991,8 +998,36 @@ const ProductFormModal = ({ product, onClose, onSave, token }) => {
         }
 
         if (data.errors) {
-          setErrors(data.errors);
-          throw new Error('Please fix the form errors');
+          // Laravel validation errors come as arrays, so we need to flatten them
+          const flattenedErrors = {};
+          Object.keys(data.errors).forEach(key => {
+            // If the error is an array, take the first message
+            // If it's already a string, use it directly
+            const errorValue = Array.isArray(data.errors[key]) 
+              ? data.errors[key][0] 
+              : data.errors[key];
+            
+            // Map backend field names to frontend field names if needed
+            // Laravel might use 'name' but frontend uses 'title' for products
+            const frontendFieldName = key === 'name' ? 'title' : key;
+            flattenedErrors[frontendFieldName] = errorValue;
+          });
+          
+          setErrors(flattenedErrors);
+          
+          // Show toast with all errors or first error
+          const errorMessages = Object.entries(flattenedErrors)
+            .map(([field, msg]) => `${field}: ${msg}`)
+            .join(', ');
+          
+          if (errorMessages) {
+            toast.error(errorMessages);
+          } else {
+            toast.error('Please fix the errors in the form');
+          }
+          
+          // Don't throw error - just return so user can see the errors
+          return;
         }
         throw new Error(
           data.message || `Failed to ${isEdit ? 'update' : 'create'} product`

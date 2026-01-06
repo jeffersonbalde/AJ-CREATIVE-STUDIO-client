@@ -10,6 +10,8 @@ import { showAlert } from "../../services/notificationService";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import LandingPageSectionFormModal from './LandingPageSectionFormModal';
+import LandingPageSectionDetailsModal from './LandingPageSectionDetailsModal';
+import { FaLayerGroup, FaEdit, FaTrash, FaBox } from 'react-icons/fa';
 
 const LandingPageSections = () => {
   const { token } = useAuth();
@@ -35,8 +37,11 @@ const LandingPageSections = () => {
     activeSections: 0,
   });
   const [collections, setCollections] = useState([]);
+  const [sectionProducts, setSectionProducts] = useState({}); // Store products for each section
   const [showSectionForm, setShowSectionForm] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedSection, setSelectedSection] = useState(null);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -123,10 +128,9 @@ const LandingPageSections = () => {
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
       filtered = filtered.filter((section) => {
-        const nameMatch = section.name?.toLowerCase().includes(search);
         const titleMatch = section.title?.toLowerCase().includes(search);
         const descMatch = section.description?.toLowerCase().includes(search);
-        return nameMatch || titleMatch || descMatch;
+        return titleMatch || descMatch;
       });
     }
 
@@ -157,11 +161,36 @@ const LandingPageSections = () => {
     });
   }, [allSections, searchTerm, statusFilter, currentPage, itemsPerPage]);
 
+  // Fetch collections for dropdowns and section product lookups
+  const fetchCollections = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/product-collections?per_page=1000`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: 'no-cache',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.collections) {
+          setCollections(data.collections);
+        } else if (data.collections && Array.isArray(data.collections)) {
+          // Handle alternative response structure
+          setCollections(data.collections);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    }
+  }, [token, apiBaseUrl]);
+
   // Fetch all sections on mount
   useEffect(() => {
     fetchAllSections();
     fetchCollections();
-  }, [fetchAllSections]);
+  }, [fetchAllSections, fetchCollections]);
 
   // Filter and paginate when search term, status filter, page, or items per page changes
   useEffect(() => {
@@ -170,25 +199,88 @@ const LandingPageSections = () => {
     }
   }, [filterAndPaginateSections, initialLoading]);
 
-  const fetchCollections = async () => {
-    try {
-      const response = await fetch(`${apiBaseUrl}/product-collections/list`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.collections) {
-          setCollections(data.collections);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching collections:', error);
+  // Fetch products for each section
+  const fetchSectionProducts = useCallback(async (sections) => {
+    if (!sections || sections.length === 0 || !collections || collections.length === 0) {
+      console.log('Skipping product fetch - no sections or collections');
+      return;
     }
-  };
+
+    const productsMap = {};
+    
+    for (const section of sections) {
+      try {
+        // Find the collection for this section by slug or id
+        const collection = collections.find(c => 
+          c.slug === section.source_value || 
+          c.id?.toString() === section.source_value?.toString() ||
+          c.id === section.source_value
+        );
+        
+        console.log(`Section ${section.id}:`, {
+          source_value: section.source_value,
+          collection_found: !!collection,
+          collection_id: collection?.id,
+          collection_slug: collection?.slug,
+          collections_count: collections.length
+        });
+
+        if (collection) {
+          // Fetch collection details which should include products
+          const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`Collection ${collection.id} response:`, data);
+            
+            if (data.success && data.collection) {
+              // Get products from collection
+              const collectionProducts = data.collection.products || [];
+              console.log(`Collection ${collection.id} products:`, collectionProducts);
+              
+              // Limit and store full product objects for use in details modal
+              const limitedProducts = collectionProducts.slice(0, section.product_count || 10);
+              productsMap[section.id] = limitedProducts;
+              console.log(`Section ${section.id} products stored:`, limitedProducts);
+            } else {
+              console.warn(`No products found for collection ${collection.id}`);
+              productsMap[section.id] = [];
+            }
+          } else {
+            const errorText = await response.text();
+            console.error(`Failed to fetch collection ${collection.id}:`, response.status, errorText);
+            productsMap[section.id] = [];
+          }
+        } else {
+          console.warn(`Collection not found for section ${section.id} with source_value: ${section.source_value}`);
+          productsMap[section.id] = [];
+        }
+      } catch (error) {
+        console.error(`Error fetching products for section ${section.id}:`, error);
+        productsMap[section.id] = [];
+      }
+    }
+    
+    console.log('Final products map:', productsMap);
+    setSectionProducts(productsMap);
+  }, [token, apiBaseUrl, collections]);
+
+  // Fetch products when sections or collections change
+  useEffect(() => {
+    if (allSections.length > 0 && collections.length > 0 && !initialLoading) {
+      console.log('Fetching products for sections:', {
+        sectionsCount: allSections.length,
+        collectionsCount: collections.length,
+        sections: allSections.map(s => ({ id: s.id, source_value: s.source_value }))
+      });
+      fetchSectionProducts(allSections);
+    }
+  }, [allSections, collections, fetchSectionProducts, initialLoading]);
 
   // Ensure toast container has highest z-index above modals
   useEffect(() => {
@@ -254,6 +346,16 @@ const LandingPageSections = () => {
   const handleEditSection = (section) => {
     setEditingSection(section);
     setShowSectionForm(true);
+  };
+
+  const handleViewDetails = (section) => {
+    setSelectedSection(section);
+    setShowDetailModal(true);
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetailModal(false);
+    setSelectedSection(null);
   };
 
   const handleDeleteSection = async (section) => {
@@ -350,58 +452,6 @@ const LandingPageSections = () => {
   const isActionDisabled = (id = null) =>
     actionLock || (actionLoading && actionLoading !== id);
 
-  const handleToggleActive = async (section) => {
-    if (actionLock || isActionDisabled(section.id)) return;
-
-    try {
-      setActionLoading(section.id);
-      setActionLock(true);
-
-      const response = await fetch(`${apiBaseUrl}/landing-page-sections/${section.id}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          is_active: !section.is_active,
-        }),
-      });
-
-      if (response.ok) {
-        toast.success(`Section ${!section.is_active ? 'activated' : 'deactivated'} successfully`, {
-          style: { zIndex: 100002 }
-        });
-        // Update in allSections and recalculate stats
-        setAllSections(prev => {
-          const updated = prev.map(sec => 
-            sec.id === section.id ? { ...sec, is_active: !sec.is_active } : sec
-          );
-          const activeSections = updated.filter(s => s.is_active === true).length;
-          setStats({
-            totalSections: updated.length,
-            activeSections: activeSections,
-          });
-          return updated;
-        });
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || 'Failed to update section', {
-          style: { zIndex: 100002 }
-        });
-      }
-    } catch (error) {
-      console.error('Error updating section:', error);
-      toast.error(`Error updating section: ${error.message}`, {
-        style: { zIndex: 100002 }
-      });
-    } finally {
-      setActionLoading(null);
-      setActionLock(false);
-    }
-  };
-
   const handleMoveUp = async (section, index) => {
     if (index === 0 || actionLock) return;
 
@@ -466,31 +516,64 @@ const LandingPageSections = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setShowSectionForm(false);
     setEditingSection(null);
     // Refresh all sections after save
-    fetchAllSections();
+    await fetchAllSections();
+    // Also refresh collections
+    await fetchCollections();
+    // Products will be fetched automatically via useEffect when allSections and collections update
   };
 
   const startIndex = useMemo(() => {
     return (paginationMeta.current_page - 1) * itemsPerPage;
   }, [paginationMeta, itemsPerPage]);
 
-  const getSourceLabel = (section) => {
-    const collection = collections.find(c => c.slug === section.source_value);
-    return collection ? collection.name : section.source_value;
+  const getSectionTitle = (section) => {
+    return section.title || 'Untitled Section';
+  };
+
+  // Get the name of the product collection for a section (used in Products column)
+  const getCollectionName = (section) => {
+    if (!collections || collections.length === 0) {
+      return 'Loading...';
+    }
+
+    if (!section.source_value) {
+      return 'No collection';
+    }
+
+    // Try multiple matching strategies
+    const collection = collections.find((c) => {
+      // Match by slug (most common)
+      if (c.slug === section.source_value) return true;
+      // Match by id (string comparison)
+      if (c.id?.toString() === section.source_value?.toString()) return true;
+      // Match by id (number comparison)
+      if (c.id === parseInt(section.source_value)) return true;
+      // Match by name (fallback)
+      if (c.name === section.source_value) return true;
+      return false;
+    });
+
+    if (collection) {
+      return collection.name || collection.title || `Collection ${collection.id}`;
+    }
+
+    // If no match found, return the source_value as fallback (might be a tag or other identifier)
+    return section.source_value;
   };
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 landing-page-sections-container fadeIn">
+    <div className="container-fluid px-3 pt-0 pb-2 inventory-categories-container fadeIn">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
             style={{ color: "var(--text-primary)" }}
           >
-            <i className="fas fa-layer-group me-2"></i>
+            <FaLayerGroup className="me-2" />
             Landing Page Sections
           </h1>
           <p className="mb-0 small" style={{ color: "var(--text-muted)" }}>
@@ -640,7 +723,7 @@ const LandingPageSections = () => {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search by name, title or description..."
+                  placeholder="Search by title or description..."
                   value={searchTerm}
                   onChange={handleSearchChange}
                   style={{
@@ -756,7 +839,7 @@ const LandingPageSections = () => {
           <div className="d-flex justify-content-between align-items-center">
             <h5 className="card-title mb-0 fw-semibold text-white">
               <i className="fas fa-layer-group me-2"></i>
-              Section Catalog
+              Sections Catalog
               {!loading && (
                 <small className="opacity-75 ms-2 text-white">
                   ({paginationMeta.total} total)
@@ -779,42 +862,30 @@ const LandingPageSections = () => {
                     </th>
                     <th
                       className="text-center small fw-semibold"
-                      style={{ width: "5%" }}
+                      style={{ width: "10%" }}
                     >
-                      Order
+                      Actions
                     </th>
-                    <th className="small fw-semibold" style={{ width: "15%" }}>
-                      Name
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>
+                    <th className="small fw-semibold" style={{ width: "30%" }}>
                       Title
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "15%" }}>
-                      Source
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "25%" }}
                     >
                       Products
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "14%" }}
                     >
                       Style
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "14%" }}
                     >
                       Status
-                    </th>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "17%" }}
-                    >
-                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -856,42 +927,30 @@ const LandingPageSections = () => {
                     </th>
                     <th
                       className="text-center small fw-semibold"
-                      style={{ width: "5%" }}
+                      style={{ width: "10%" }}
                     >
-                      Order
+                      Actions
                     </th>
-                    <th className="small fw-semibold" style={{ width: "15%" }}>
-                      Name
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>
+                    <th className="small fw-semibold" style={{ width: "30%" }}>
                       Title
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "15%" }}>
-                      Source
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "25%" }}
                     >
                       Products
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "14%" }}
                     >
                       Style
                     </th>
                     <th
                       className="small fw-semibold text-center"
-                      style={{ width: "8%" }}
+                      style={{ width: "14%" }}
                     >
                       Status
-                    </th>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "17%" }}
-                    >
-                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -907,22 +966,27 @@ const LandingPageSections = () => {
                           {startIndex + index + 1}
                         </td>
                         <td className="text-center">
-                          <div className="d-flex flex-column gap-1 align-items-center">
+                          <div className="d-flex justify-content-center gap-1">
                             <button
-                              className="btn btn-sm btn-outline-secondary p-1"
-                              onClick={() => handleMoveUp(section, actualIndex)}
-                              disabled={actualIndex === 0 || actionLock}
-                              style={{ 
-                                fontSize: '0.7rem', 
-                                lineHeight: 1,
-                                width: '24px',
-                                height: '24px',
+                              className="btn btn-info btn-sm text-white"
+                              onClick={() => handleViewDetails(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title="View Details"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
                                 transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                               onMouseEnter={(e) => {
                                 if (!e.target.disabled) {
                                   e.target.style.transform = "translateY(-1px)";
-                                  e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
                                 }
                               }}
                               onMouseLeave={(e) => {
@@ -930,23 +994,28 @@ const LandingPageSections = () => {
                                 e.target.style.boxShadow = "none";
                               }}
                             >
-                              <i className="fas fa-chevron-up"></i>
+                              <FaBox style={{ fontSize: "0.875rem" }} />
                             </button>
                             <button
-                              className="btn btn-sm btn-outline-secondary p-1"
-                              onClick={() => handleMoveDown(section, actualIndex)}
-                              disabled={actualIndex === allSections.length - 1 || actionLock}
-                              style={{ 
-                                fontSize: '0.7rem', 
-                                lineHeight: 1,
-                                width: '24px',
-                                height: '24px',
+                              className="btn btn-success btn-sm text-white"
+                              onClick={() => handleEditSection(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title="Edit Section"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
                                 transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                               onMouseEnter={(e) => {
                                 if (!e.target.disabled) {
                                   e.target.style.transform = "translateY(-1px)";
-                                  e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
                                 }
                               }}
                               onMouseLeave={(e) => {
@@ -954,23 +1023,52 @@ const LandingPageSections = () => {
                                 e.target.style.boxShadow = "none";
                               }}
                             >
-                              <i className="fas fa-chevron-down"></i>
+                              {actionLoading === section.id ? (
+                                <span
+                                  className="spinner-border spinner-border-sm"
+                                  role="status"
+                                ></span>
+                              ) : (
+                                <FaEdit style={{ fontSize: "0.875rem" }} />
+                              )}
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm text-white"
+                              onClick={() => handleDeleteSection(section)}
+                              disabled={isActionDisabled(section.id)}
+                              title="Delete Section"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow =
+                                    "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            >
+                              {actionLoading === section.id ? (
+                                <span
+                                  className="spinner-border spinner-border-sm"
+                                  role="status"
+                                ></span>
+                              ) : (
+                                <FaTrash style={{ fontSize: "0.875rem" }} />
+                              )}
                             </button>
                           </div>
-                        </td>
-                        <td style={{ maxWidth: "200px", overflow: "hidden" }}>
-                          <code
-                            className="small"
-                            style={{
-                              color: "var(--text-muted)",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={section.name}
-                          >
-                            {section.name}
-                          </code>
                         </td>
                         <td style={{ maxWidth: "250px", overflow: "hidden" }}>
                           <div
@@ -1000,14 +1098,17 @@ const LandingPageSections = () => {
                             </div>
                           )}
                         </td>
-                        <td>
-                          <span className="badge bg-info">{getSourceLabel(section)}</span>
-                        </td>
-                        <td
-                          className="text-center fw-semibold"
-                          style={{ color: "var(--text-primary)" }}
-                        >
-                          {section.product_count ?? 0}
+                        <td className="text-center">
+                          <span 
+                            className="badge bg-info"
+                            style={{
+                              color: '#fff',
+                              textDecoration: 'none',
+                              fontWeight: '500'
+                            }}
+                          >
+                            {getCollectionName(section)}
+                          </span>
                         </td>
                         <td className="text-center">
                           <span className="badge bg-secondary text-capitalize">
@@ -1020,127 +1121,6 @@ const LandingPageSections = () => {
                           >
                             {section.is_active ? 'Active' : 'Inactive'}
                           </span>
-                        </td>
-                        <td className="text-center">
-                          <div className="d-flex justify-content-center gap-1">
-                            <button
-                              className="btn btn-success btn-sm text-white"
-                              onClick={() => handleToggleActive(section)}
-                              disabled={isActionDisabled(section.id)}
-                              title={section.is_active ? 'Deactivate' : 'Activate'}
-                              style={{
-                                width: "32px",
-                                height: "32px",
-                                borderRadius: "6px",
-                                transition: "all 0.2s ease-in-out",
-                                padding: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!e.target.disabled) {
-                                  e.target.style.transform = "translateY(-1px)";
-                                  e.target.style.boxShadow =
-                                    "0 4px 8px rgba(0,0,0,0.2)";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
-                              }}
-                            >
-                              {actionLoading === section.id ? (
-                                <span
-                                  className="spinner-border spinner-border-sm"
-                                  role="status"
-                                ></span>
-                              ) : (
-                                <i
-                                  className={`fas ${section.is_active ? 'fa-eye-slash' : 'fa-eye'}`}
-                                  style={{ fontSize: "0.875rem" }}
-                                ></i>
-                              )}
-                            </button>
-                            <button
-                              className="btn btn-warning btn-sm text-white"
-                              onClick={() => handleEditSection(section)}
-                              disabled={isActionDisabled(section.id)}
-                              title="Edit"
-                              style={{
-                                width: "32px",
-                                height: "32px",
-                                borderRadius: "6px",
-                                transition: "all 0.2s ease-in-out",
-                                padding: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!e.target.disabled) {
-                                  e.target.style.transform = "translateY(-1px)";
-                                  e.target.style.boxShadow =
-                                    "0 4px 8px rgba(0,0,0,0.2)";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
-                              }}
-                            >
-                              {actionLoading === section.id ? (
-                                <span
-                                  className="spinner-border spinner-border-sm"
-                                  role="status"
-                                ></span>
-                              ) : (
-                                <i
-                                  className="fas fa-edit"
-                                  style={{ fontSize: "0.875rem" }}
-                                ></i>
-                              )}
-                            </button>
-                            <button
-                              className="btn btn-danger btn-sm text-white"
-                              onClick={() => handleDeleteSection(section)}
-                              disabled={isActionDisabled(section.id)}
-                              title="Delete"
-                              style={{
-                                width: "32px",
-                                height: "32px",
-                                borderRadius: "6px",
-                                transition: "all 0.2s ease-in-out",
-                                padding: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!e.target.disabled) {
-                                  e.target.style.transform = "translateY(-1px)";
-                                  e.target.style.boxShadow =
-                                    "0 4px 8px rgba(0,0,0,0.2)";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
-                              }}
-                            >
-                              {actionLoading === section.id ? (
-                                <span
-                                  className="spinner-border spinner-border-sm"
-                                  role="status"
-                                ></span>
-                              ) : (
-                                <i
-                                  className="fas fa-trash"
-                                  style={{ fontSize: "0.875rem" }}
-                                ></i>
-                              )}
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     );
@@ -1289,8 +1269,8 @@ const LandingPageSections = () => {
                             e.target.style.boxShadow =
                               "0 2px 4px rgba(0,0,0,0.1)";
                             e.target.style.backgroundColor =
-                              "var(--primary-color)";
-                            e.target.style.color = "white";
+                              "var(--primary-light)";
+                            e.target.style.color = "var(--text-primary)";
                           }
                         }}
                         onMouseLeave={(e) => {
@@ -1369,6 +1349,17 @@ const LandingPageSections = () => {
           onSave={handleSave}
           section={editingSection}
           collections={collections}
+          existingSections={allSections}
+        />
+      )}
+
+      {/* Section Details Modal */}
+      {showDetailModal && selectedSection && (
+        <LandingPageSectionDetailsModal
+          section={selectedSection}
+          onClose={handleCloseDetail}
+          collections={collections}
+          products={sectionProducts[selectedSection.id] || []}
         />
       )}
 
@@ -1433,13 +1424,13 @@ const TableRowSkeleton = () => (
     </td>
     <td className="text-center">
       <div className="d-flex justify-content-center gap-1">
-        {[1, 2].map((item) => (
+        {[1, 2, 3].map((item) => (
           <div
             key={item}
             className="placeholder action-placeholder"
             style={{
-              width: "24px",
-              height: "24px",
+              width: "32px",
+              height: "32px",
               borderRadius: "6px",
             }}
           ></div>
@@ -1447,11 +1438,21 @@ const TableRowSkeleton = () => (
       </div>
     </td>
     <td>
-      <div className="placeholder-wave">
-        <span
-          className="placeholder col-8"
-          style={{ height: "16px" }}
-        ></span>
+      <div className="d-flex align-items-center">
+        <div className="flex-grow-1">
+          <div className="placeholder-wave mb-1">
+            <span
+              className="placeholder col-8"
+              style={{ height: "16px" }}
+            ></span>
+          </div>
+          <div className="placeholder-wave">
+            <span
+              className="placeholder col-6"
+              style={{ height: "14px" }}
+            ></span>
+          </div>
+        </div>
       </div>
     </td>
     <td>
@@ -1469,32 +1470,7 @@ const TableRowSkeleton = () => (
     </td>
     <td>
       <div className="placeholder-wave">
-        <span className="placeholder col-4" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-5" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-5" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-    <td className="text-center">
-      <div className="d-flex justify-content-center gap-1">
-        {[1, 2, 3].map((item) => (
-          <div
-            key={item}
-            className="placeholder action-placeholder"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-            }}
-          ></div>
-        ))}
+        <span className="placeholder col-8" style={{ height: "16px" }}></span>
       </div>
     </td>
   </tr>
