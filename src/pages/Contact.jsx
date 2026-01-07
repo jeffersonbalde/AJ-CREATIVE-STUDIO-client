@@ -15,22 +15,29 @@ const Contact = () => {
           padding: '3rem 1rem 4rem',
           backgroundColor: '#FFFFFF',
           flex: '1 0 auto',
+          // Responsive: uses CSS variable that updates on resize for consistent spacing across all screen sizes
+          // Same spacing on mobile and desktop - uses navbar height directly
+          paddingTop: 'var(--navbar-height, 0)',
+          marginTop: '0px',
         }}
       >
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          {/* Page title */}
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          {/* Page title - centered like form but text left-aligned */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: false, margin: '-100px' }}
             transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              fontSize: 'clamp(2rem, 5vw, 3rem)',
+              fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
               fontWeight: 700,
               color: '#000',
-              textAlign: 'center',
+              textAlign: 'left',
               marginTop: 0,
-              marginBottom: '2.5rem',
+              marginBottom: '2rem',
+              maxWidth: '720px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
             }}
           >
             Contact

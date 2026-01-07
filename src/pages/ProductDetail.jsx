@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { allProducts } from './Products';
-import { getProductImage as getApiProductImage } from '../utils/productImageUtils';
+import { getProductImage as getApiProductImage, getAllProductImages } from '../utils/productImageUtils';
 import gcashLogo from '../assets/images/gcash-logo.jpg';
 import mayaLogo from '../assets/images/maya-logo.png';
 import grabPayLogo from '../assets/images/grabpay-logo.png';
@@ -199,6 +199,8 @@ const ProductDetail = () => {
   const [selectedSort, setSelectedSort] = useState('Most Recent');
   const [currentPage, setCurrentPage] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [backHover, setBackHover] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -353,9 +355,11 @@ const ProductDetail = () => {
 
         if (apiProduct) {
           setProduct(apiProduct);
+          setCurrentImageIndex(0); // Reset to first image when product changes
         } else {
           // Fallback: create generic dummy product
           setProduct(createDummyProduct(slug));
+          setCurrentImageIndex(0);
         }
       } catch (error) {
         console.error('Error fetching product detail:', error);
@@ -380,10 +384,28 @@ const ProductDetail = () => {
     { name: '7-Eleven', src: sevenElevenLogo },
   ];
 
-  // Product images array for gallery - prefer real product image from API, fallback to samples
-  const mainImage = product ? getApiProductImage(product) : null;
-  const productImages = mainImage
-    ? [{ src: mainImage, alt: product.title }]
+  // Product images array for gallery - get all feature images from API, fallback to samples
+  const apiImages = product ? getAllProductImages(product) : [];
+  const thumb = product ? getApiProductImage(product) : null;
+
+  // Build gallery: thumbnail first (if present), then feature images, remove duplicates
+  const combined = [
+    ...(thumb ? [thumb] : []),
+    ...apiImages,
+  ].filter(Boolean);
+
+  const seen = new Set();
+  const uniqueImages = combined.filter((url) => {
+    if (seen.has(url)) return false;
+    seen.add(url);
+    return true;
+  });
+
+  const productImages = uniqueImages.length > 0
+    ? uniqueImages.map((imgSrc, index) => ({
+        src: imgSrc,
+        alt: `${product?.title || ''} - Image ${index + 1}`
+      }))
     : [
         { src: productImage1, alt: `${product?.title || ''} - Image 1` },
         { src: productImage2, alt: `${product?.title || ''} - Image 2` },
@@ -395,17 +417,31 @@ const ProductDetail = () => {
         { src: productImage8, alt: `${product?.title || ''} - Image 8` },
         { src: productImage9, alt: `${product?.title || ''} - Image 9` },
       ];
+
+  // Gallery helpers to mirror admin modal styling
+  const gallery = productImages.map((img) => img.src);
+  const featureIdx =
+    gallery.length > 0
+      ? Math.min(currentImageIndex, gallery.length - 1)
+      : 0;
   
   const handleImageChange = (index) => {
+    setHeroLoaded(false);
     setCurrentImageIndex(index);
   };
   
   const handlePreviousImage = () => {
-    setCurrentImageIndex((prev) => (prev === 0 ? productImages.length - 1 : prev - 1));
+    setHeroLoaded(false);
+    setCurrentImageIndex((prev) =>
+      prev === 0 ? productImages.length - 1 : prev - 1
+    );
   };
   
   const handleNextImage = () => {
-    setCurrentImageIndex((prev) => (prev === productImages.length - 1 ? 0 : prev + 1));
+    setHeroLoaded(false);
+    setCurrentImageIndex((prev) =>
+      prev === productImages.length - 1 ? 0 : prev + 1
+    );
   };
   
 
@@ -486,16 +522,208 @@ const ProductDetail = () => {
   };
 
   if (loadingProduct || !product) {
+    // Skeleton loading state – mimics final layout with gray placeholders
     return (
       <>
-        <section style={{ padding: '3rem 1rem 4rem', backgroundColor: '#FFFFFF' }} className="product-detail-section">
-          <div style={{ maxWidth: '1100px', margin: '0 auto', textAlign: 'center' }}>
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+        <section
+          style={{ padding: '3rem 1rem 4rem', backgroundColor: '#FFFFFF' }}
+          className="product-detail-section"
+        >
+          <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+            {/* Back link skeleton */}
+            <div
+              style={{
+                width: '140px',
+                height: '16px',
+                marginBottom: '1.25rem',
+                background:
+                  'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                backgroundSize: '200% 100%',
+                borderRadius: '999px',
+                animation: 'shimmer 1.5s ease-in-out infinite',
+              }}
+            />
+
+            {/* Main layout skeleton */}
+            <div
+              className="product-detail-main-layout-skeleton"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 1fr',
+                gap: '2.5rem',
+                alignItems: 'flex-start',
+                marginBottom: '3rem',
+              }}
+            >
+              {/* Left: image skeleton – structure mirrors real hero + thumbnails */}
+              <div className="product-detail-skeleton-left">
+                {/* Hero container skeleton matches .detail-hero */}
+                <div
+                  className="detail-hero position-relative rounded"
+                  style={{
+                    overflow: 'hidden',
+                    maxHeight: '600px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'var(--background-light)',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '420px',
+                      borderRadius: '8px',
+                      border: '1px solid #E0E0E0',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+
+                {/* Thumbnails row skeleton – matches loaded strip container */}
+                <div
+                  className="product-detail-skeleton-thumbs d-flex justify-content-start gap-2 flex-wrap mt-3 p-3 rounded"
+                  style={{
+                    background: 'var(--background-light)',
+                    border: '1px solid var(--input-border)',
+                  }}
+                >
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '8px',
+                        border: '1px solid #E0E0E0',
+                        background:
+                          'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Right: text skeletons */}
+              <div>
+                {/* Title lines */}
+                <div
+                  style={{
+                    width: '60%',
+                    height: '22px',
+                    marginBottom: '0.75rem',
+                    borderRadius: '6px',
+                    background:
+                      'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.5s ease-in-out infinite',
+                  }}
+                />
+                <div
+                  style={{
+                    width: '40%',
+                    height: '18px',
+                    marginBottom: '1.25rem',
+                    borderRadius: '6px',
+                    background:
+                      'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.5s ease-in-out infinite',
+                  }}
+                />
+
+                {/* Price + badge skeleton */}
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  <div
+                    style={{
+                      width: '120px',
+                      height: '26px',
+                      borderRadius: '6px',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: '70px',
+                      height: '22px',
+                      borderRadius: '999px',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+
+                {/* Paragraph lines */}
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: i === 2 ? '70%' : '100%',
+                      height: '14px',
+                      marginBottom: '0.5rem',
+                      borderRadius: '6px',
+                      background:
+                        'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                ))}
+
+                {/* Add to cart button skeleton */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    marginTop: '1.5rem',
+                    borderRadius: '4px',
+                    background:
+                      'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.5s ease-in-out infinite',
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>
         <EmailSubscribeFooter />
+
+        {/* Mobile-specific tweaks for skeleton layout ONLY */}
+        <style>{`
+          @media (max-width: 991.98px) {
+            .product-detail-section .product-detail-main-layout-skeleton {
+              display: flex !important;
+              flex-direction: column !important;
+              gap: 1.75rem !important;
+            }
+
+            .product-detail-section .product-detail-skeleton-left {
+              align-self: center !important;
+              width: 100% !important;
+            }
+
+            .product-detail-section .product-detail-skeleton-left > .detail-hero > div:first-child {
+              height: 260px !important;
+            }
+
+            .product-detail-section .product-detail-skeleton-thumbs {
+              margin-top: 0.5rem !important;
+              justify-content: center !important;
+            }
+          }
+        `}</style>
       </>
     );
   }
@@ -509,15 +737,18 @@ const ProductDetail = () => {
           <button
             type="button"
             onClick={() => navigate(-1)}
+            onMouseEnter={() => setBackHover(true)}
+            onMouseLeave={() => setBackHover(false)}
             style={{
               marginBottom: '1.25rem',
               background: 'none',
               border: 'none',
               padding: 0,
               cursor: 'pointer',
-              color: '#000',
+              color: backHover ? '#555555' : '#000000',
               fontSize: '0.95rem',
               textDecoration: 'underline',
+              transition: 'color 0.2s ease',
             }}
           >
             ← Back to products
@@ -536,155 +767,178 @@ const ProductDetail = () => {
           >
             {/* Left Column: Feature Blocks with Images */}
             <div>
-              {/* Main Product Images - Responsive Gallery */}
+              {/* Main Product Images - Responsive Gallery (structure and styling like admin ProductDetailsModal) */}
               <div style={{ marginBottom: '2rem' }}>
-                {/* Main Image Display */}
-              <div
-                style={{
-                    position: 'relative',
-                    backgroundColor: '#F5F5F5',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    border: '1px solid #E0E0E0',
-                    marginBottom: '1rem',
-                  }}
-                >
-                  <img
-                    src={productImages[currentImageIndex].src}
-                    alt={productImages[currentImageIndex].alt}
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block',
-                    }}
-                  />
-                  
-                  {/* Navigation Arrows */}
-                  {productImages.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handlePreviousImage}
-                        className="product-image-nav-button product-image-nav-prev"
-                style={{
-                          position: 'absolute',
-                          left: '0.75rem',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                          border: '1px solid #E0E0E0',
-                          borderRadius: '50%',
-                          width: '40px',
-                          height: '40px',
+                {/* Hero image container */}
+                <div
+                  className="detail-hero position-relative rounded"
+                  style={{
+                    overflow: 'auto',
+                    maxHeight: '600px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                          cursor: 'pointer',
-                          zIndex: 10,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                          transition: 'all 0.2s ease',
+                    backgroundColor: 'var(--background-light)',
+                  }}
+                >
+                  {gallery.length > 0 ? (
+                    <>
+                      {/* Fade-in shimmer overlay while hero image is loading */}
+                      {!heroLoaded && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background:
+                              'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                            backgroundSize: '200% 100%',
+                            animation: 'shimmer 1.5s ease-in-out infinite',
+                          }}
+                        />
+                      )}
+                      <img
+                        src={gallery[featureIdx]}
+                        alt={product.title}
+                        style={{
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: '100%',
+                          maxHeight: '600px',
+                          objectFit: 'contain',
+                          display: 'block',
+                          opacity: heroLoaded ? 1 : 0,
+                          transition: 'opacity 0.2s ease',
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F5F5F5';
-                          e.currentTarget.style.borderColor = '#CCCCCC';
+                        onLoad={() => setHeroLoaded(true)}
+                      />
+                    </>
+                  ) : (
+                    <div
+                      className="w-100 d-flex align-items-center justify-content-center"
+                      style={{
+                        height: '300px',
+                        backgroundColor: 'var(--background-light)',
+                      }}
+                    >
+                      {/* Simple placeholder box */}
+                      <div
+                        style={{
+                          width: '80px',
+                          height: '80px',
+                          borderRadius: '16px',
+                          backgroundColor: '#E0E0E0',
                         }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-                          e.currentTarget.style.borderColor = '#E0E0E0';
-                        }}
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
-                          <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                      </button>
+                      />
+                    </div>
+                  )}
+
+                  {/* Navigation + index indicator (same layout as admin modal) */}
+                  {gallery.length > 1 && (
+                    <div
+                      className="position-absolute top-50 start-0 end-0 px-2 d-flex justify-content-between align-items-center"
+                      style={{ transform: 'translateY(-50%)' }}
+                    >
                       <button
                         type="button"
-                        onClick={handleNextImage}
-                        className="product-image-nav-button product-image-nav-next"
-                  style={{
-                          position: 'absolute',
-                          right: '0.75rem',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    border: '1px solid #E0E0E0',
-                          borderRadius: '50%',
-                          width: '40px',
-                          height: '40px',
-                      display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          zIndex: 10,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                          transition: 'all 0.2s ease',
-                      }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F5F5F5';
-                          e.currentTarget.style.borderColor = '#CCCCCC';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-                          e.currentTarget.style.borderColor = '#E0E0E0';
-                    }}
-                  >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
-                          <path d="M9 18l6-6-6-6" />
-                    </svg>
+                        className="hero-nav-btn"
+                        onClick={handlePreviousImage}
+                        onMouseEnter={() => setHeroLoaded(true)}
+                      >
+                        ‹
                       </button>
-                    </>
+                      <div className="hero-nav-indicator">
+                        {featureIdx + 1}/{gallery.length}
+                      </div>
+                      <button
+                        type="button"
+                        className="hero-nav-btn"
+                        onClick={handleNextImage}
+                        onMouseEnter={() => setHeroLoaded(true)}
+                      >
+                        ›
+                      </button>
+                    </div>
                   )}
                 </div>
 
-                {/* Thumbnail Gallery - Desktop */}
-                {productImages.length > 1 && (
-                <div
-                    className="product-image-thumbnails"
-                  style={{
-                      gap: '0.75rem',
-                  }}
-                >
-                    {productImages.map((image, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={() => handleImageChange(index)}
+                {/* Thumbnails strip (same sizing and active styling concept as admin) */}
+                {gallery.length > 0 && (
+                  <div
+                    className="d-flex justify-content-center gap-2 flex-wrap mt-3 p-3 rounded"
                     style={{
-                          backgroundColor: '#F5F5F5',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                          border: `2px solid ${currentImageIndex === index ? '#000' : '#E0E0E0'}`,
-                          padding: 0,
-                          cursor: 'pointer',
-                          transition: 'border-color 0.2s',
-                          aspectRatio: '1',
-                    }}
-                        onMouseEnter={(e) => {
-                          if (currentImageIndex !== index) {
-                            e.currentTarget.style.borderColor = '#999';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (currentImageIndex !== index) {
-                            e.currentTarget.style.borderColor = '#E0E0E0';
-                          }
+                      background: 'var(--background-light)',
+                      border: '1px solid var(--input-border)',
                     }}
                   >
-                    <img
-                          src={image.src}
-                          alt={image.alt}
-                      style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            display: 'block',
-                      }}
-                    />
-                      </button>
-                    ))}
-                    </div>
+                    {gallery.slice(0, 6).map((img, idx) => {
+                      const isActive = idx === featureIdx;
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            width: '64px',
+                            height: '64px',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            border: isActive
+                              ? '3px solid var(--primary-color)'
+                              : '1px solid var(--input-border)',
+                            backgroundColor: '#fff',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            boxShadow: isActive
+                              ? '0 0 0 3px rgba(0, 123, 255, 0.25)'
+                              : 'none',
+                            transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                            position: 'relative',
+                          }}
+                          onClick={() => handleImageChange(idx)}
+                          onMouseEnter={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.borderColor =
+                                'var(--primary-color)';
+                              e.currentTarget.style.opacity = '0.8';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.borderColor =
+                                'var(--input-border)';
+                              e.currentTarget.style.opacity = '1';
+                            }
+                          }}
+                        >
+                          {isActive && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--primary-color)',
+                                border: '2px solid #fff',
+                                zIndex: 10,
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                              }}
+                            />
+                          )}
+                          <img
+                            src={img}
+                            alt={`feature-${idx}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-
               </div>
             </div>
 
@@ -898,7 +1152,6 @@ const ProductDetail = () => {
                   
                   // Open cart panel
                   setCartOpen(true);
-                  toast.success(`${product.title} added to cart`);
                 }}
                 style={{
                   width: '100%',
@@ -2587,6 +2840,42 @@ const ProductDetail = () => {
         pauseOnHover
         theme="light"
       />
+
+      {/* Mobile / tablet-specific layout tweaks for product detail images and skeleton */}
+      <style>{`
+        @media (max-width: 991.98px) {
+          /* Stack image gallery above text on small screens */
+          .product-detail-section .product-detail-main-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 1.75rem !important;
+          }
+
+          /* Stack skeleton layout similarly on mobile */
+          .product-detail-section .product-detail-main-layout-skeleton {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 1.75rem !important;
+          }
+
+          .product-detail-section .product-detail-skeleton-left > div:first-child {
+            height: 260px !important;
+          }
+
+          .product-detail-section .product-detail-skeleton-thumbs {
+            margin-top: 0.5rem !important;
+          }
+
+          .product-detail-section .detail-hero {
+            max-height: 420px !important;
+          }
+
+          .product-detail-section .product-image-thumbnails,
+          .product-detail-section .d-flex.justify-content-center.gap-2.flex-wrap.mt-3.p-3.rounded {
+            justify-content: flex-start !important;
+          }
+        }
+      `}</style>
     </>
   );
 };

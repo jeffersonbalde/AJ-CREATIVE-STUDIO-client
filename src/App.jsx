@@ -8,7 +8,9 @@ import ProductDetail from './pages/ProductDetail';
 import Contact from './pages/Contact';
 import Checkout from './pages/Checkout';
 import GcashPayment from './pages/GcashPayment';
-import Login from './pages/Login';
+import Login from './pages/Login'; // admin login
+import PublicLogin from './pages/public/auth/Login';
+import Signup from './pages/public/auth/Signup';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductList from './pages/admin/ProductList';
 import ProductCategories from './pages/admin/ProductCategories';
@@ -50,10 +52,11 @@ const ProtectedRoute = ({ children }) => {
 const AppContent = () => {
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const isAuthRoute = location.pathname.startsWith('/auth');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {!isAdminRoute && (
+      {!isAdminRoute && !isAuthRoute && (
         <>
           <Navbar />
           <CartPanel />
@@ -67,6 +70,8 @@ const AppContent = () => {
           <Route path="/all-products" element={<Products />} />
           <Route path="/products/:slug" element={<ProductDetail />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/auth/login" element={<PublicLogin />} />
+          <Route path="/auth/signup" element={<Signup />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/gcash-payment" element={<GcashPayment />} />
 

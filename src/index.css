@@ -15,18 +15,41 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: #F5F5F0;
-  overflow-x: hidden;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  position: relative;
 }
 
 html {
   scroll-behavior: smooth;
   height: 100%;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
 }
 
 body {
   position: relative;
   min-height: 100%;
   height: auto;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+}
+
+/* Root container */
+#root {
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  position: relative;
+}
+
+/* Prevent horizontal overflow on main containers */
+main, section, article, div[class*="container"], div[class*="wrapper"] {
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body,
@@ -1134,7 +1157,10 @@ body {
 
 /* Rest of your existing CSS for cart, hero, etc. */
 .main-content-wrapper {
-  padding-top: 80px;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  position: relative;
+  overflow: visible;
 }
 
 /* Cart Panel Styles */
@@ -1185,11 +1211,6 @@ body {
     min-width: 28px !important;
     font-size: 0.9rem !important;
   }
-}
-
-/* Rest of your existing CSS for cart, hero, etc. */
-.main-content-wrapper {
-  padding-top: 80px;
 }
 
 /* Cart Panel Styles */

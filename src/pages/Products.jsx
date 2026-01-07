@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+import FilterAndSort from '../components/FilterAndSort';
 import { getProductImage as getApiProductImage, formatCurrency } from '../utils/productImageUtils';
 
 // Helper function to convert title to URL-friendly slug
@@ -409,10 +410,7 @@ const Products = () => {
     priceTo: '',
     categories: [], // multiple categories
   });
-  const [sortBy, setSortBy] = useState('Featured');
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [expandedFilter, setExpandedFilter] = useState(null); // 'price' | 'category' | null
-  const [filterView, setFilterView] = useState('main'); // 'main' | 'price' | 'category'
+  const [sortBy, setSortBy] = useState('Alphabetically, A-Z');
   const productsPerPage = 8;
 
   const apiBaseUrl =
@@ -556,22 +554,32 @@ const Products = () => {
     [sourceProducts]
   );
 
+  // Filter collections to only show those with products
+  const collectionsWithProducts = useMemo(() => {
+    return collections.filter((collection) => {
+      // Check if collection has products array with at least one product
+      return Array.isArray(collection.products) && collection.products.length > 0;
+    });
+  }, [collections]);
+
   // Filter + sort
   const filteredAndSortedProducts = useMemo(() => {
-    // If a collection is selected and it has products, prefer those products directly
+    let filtered = [];
+
+    // If a collection is selected and it has products, use those products
     if (selectedCollectionId && collections.length > 0) {
       const collection = collections.find(
         (c) => String(c.id) === String(selectedCollectionId)
       );
       if (collection && Array.isArray(collection.products) && collection.products.length > 0) {
-        const normalized = collection.products.map((p) => ({
+        // Normalize collection products
+        filtered = collection.products.map((p) => ({
           ...p,
           oldPrice: p.old_price ?? p.oldPrice ?? null,
           onSale: p.onSale ?? !!p.on_sale,
           availability:
             p.availability ?? (p.is_active === false ? 'Unavailable' : 'In Stock'),
         }));
-        return normalized;
       } else if (collection) {
         // Fallback: filter main products by the collection's product IDs if products were not eager loaded
         const productIds = new Set(
@@ -579,18 +587,21 @@ const Products = () => {
             ? collection.products.map((p) => String(p.id))
             : []
         );
-        const filtered = sourceProducts.filter((p) => productIds.has(String(p.id)));
-        return filtered;
+        filtered = sourceProducts.filter((p) => productIds.has(String(p.id)));
+      } else {
+        filtered = [];
       }
-      return [];
+    } else {
+      // No collection selected, use all products
+      filtered = [...sourceProducts];
     }
 
-    let filtered = [...sourceProducts];
-
+    // Apply category filters
     if (filters.categories.length > 0) {
       filtered = filtered.filter(p => filters.categories.includes(p.category));
     }
 
+    // Apply price filters
     if (filters.priceFrom !== '' || filters.priceTo !== '') {
       const from = filters.priceFrom === '' ? 0 : parseFloat(filters.priceFrom);
       const to =
@@ -598,13 +609,8 @@ const Products = () => {
       filtered = filtered.filter(p => p.price >= from && p.price <= to);
     }
 
+    // Apply sorting
     switch (sortBy) {
-      case 'Best selling':
-        filtered.sort((a, b) => {
-          if (a.onSale === b.onSale) return b.price - a.price;
-          return b.onSale ? 1 : -1;
-        });
-        break;
       case 'Alphabetically, A-Z':
         filtered.sort((a, b) => a.title.localeCompare(b.title));
         break;
@@ -620,14 +626,13 @@ const Products = () => {
       case 'Date, new to old':
         filtered = [...filtered].reverse();
         break;
-      case 'Featured':
       case 'Date, old to new':
       default:
         break;
     }
 
     return filtered;
-  }, [filters, sortBy, sourceProducts]);
+  }, [filters, sortBy, sourceProducts, selectedCollectionId, collections]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedProducts.length / productsPerPage);
@@ -645,32 +650,9 @@ const Products = () => {
   const handleRemoveAll = () => {
     setFilters({ priceFrom: '', priceTo: '', categories: [] });
     setSelectedCollectionId(null);
-    setSortBy('Featured');
+    setSortBy('Alphabetically, A-Z');
     setCurrentPage(1);
-    setFilterView('main');
   };
-
-  const handleResetPrice = () => {
-    setFilters(prev => ({ ...prev, priceFrom: '', priceTo: '' }));
-  };
-
-  const handleResetCategory = () => {
-    setFilters(prev => ({ ...prev, categories: [] }));
-  };
-
-  const handleCategoryToggle = category => {
-    setFilters(prev => {
-      const exists = prev.categories.includes(category);
-      return {
-        ...prev,
-        categories: exists
-          ? prev.categories.filter(c => c !== category)
-          : [...prev.categories, category],
-      };
-    });
-  };
-
-  const selectedCategoryCount = filters.categories.length;
 
   const handleCollectionChange = (value) => {
     if (value === '' || value === 'all') {
@@ -679,604 +661,49 @@ const Products = () => {
       const id = parseInt(value, 10);
       setSelectedCollectionId(Number.isNaN(id) ? null : id);
     }
-    setSortBy('Featured');
+    setSortBy('Alphabetically, A-Z');
     setCurrentPage(1);
   };
 
-  const handleApplyFilters = () => {
-    setCurrentPage(1);
-    setMobileDrawerOpen(false);
-    setFilterView('main');
-  };
-
-  // Close desktop dropdown when clicking outside
+  // Clear selected collection if it no longer has products
   useEffect(() => {
-    const onClick = e => {
-      if (expandedFilter && !e.target.closest('.desktop-filter-bar')) {
-        setExpandedFilter(null);
+    if (selectedCollectionId) {
+      const selectedCollectionExists = collectionsWithProducts.some(
+        (c) => String(c.id) === String(selectedCollectionId)
+      );
+      if (!selectedCollectionExists && collectionsWithProducts.length > 0) {
+        // Only clear if there are other collections available
+        // This prevents clearing when collections are still loading
+        setSelectedCollectionId(null);
       }
-    };
-    if (expandedFilter) {
-      document.addEventListener('mousedown', onClick);
-      return () => document.removeEventListener('mousedown', onClick);
     }
-  }, [expandedFilter]);
+  }, [selectedCollectionId, collectionsWithProducts]);
 
   return (
-    <div style={{ minHeight: '100vh', position: 'relative' }}>
-      {/* Backdrop for mobile drawer */}
-      <AnimatePresence>
-        {mobileDrawerOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => {
-              setMobileDrawerOpen(false);
-              setFilterView('main');
-            }}
-            className="mobile-drawer-backdrop"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.45)',
-              zIndex: 1001,
-              display: 'none',
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Mobile filter drawer */}
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: mobileDrawerOpen ? 0 : '100%' }}
-        transition={{ type: 'tween', duration: 0.3, ease: 'easeInOut' }}
-        className="mobile-filter-drawer"
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: '80%',
-          maxWidth: '400px',
-          backgroundColor: '#FFFFFF',
-          zIndex: 1002,
-          boxShadow: '-2px 0 8px rgba(0,0,0,0.15)',
-          display: 'none',
-          flexDirection: 'column',
-          overflowY: 'auto',
-        }}
-      >
-        {/* Drawer header */}
-        <div
-          style={{
-            padding: '1.5rem',
-            borderBottom: '1px solid #E0E0E0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            position: 'sticky',
-            top: 0,
-            backgroundColor: '#FFFFFF',
-            zIndex: 1,
-          }}
-        >
-          <div style={{ textAlign: 'center', flex: 1 }}>
-            <h2
-              className="filter-sort-text"
-              style={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: '#000',
-                margin: '0 0 0.25rem 0',
-              }}
-            >
-              Filter and sort
-            </h2>
-            <p style={{ fontSize: '0.875rem', color: '#666', margin: 0 }}>
-              {filteredAndSortedProducts.length} of {sourceProducts.length} products
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setMobileDrawerOpen(false);
-              setFilterView('main');
-            }}
-            aria-label="Close filter drawer"
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '0.5rem',
-              marginLeft: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              cursor: 'pointer',
-            }}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Drawer content */}
-        <div style={{ padding: '1.5rem', flex: 1 }}>
-          <AnimatePresence mode="wait">
-            {filterView === 'main' && (
-              <motion.div
-                key="main"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div style={{ marginBottom: '2rem' }}>
-                  {/* Price row */}
-                  <div>
-                    <div
-                      onClick={() => setFilterView('price')}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '1rem 0',
-                        borderBottom: '1px solid #E0E0E0',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '1rem',
-                          color: '#000',
-                          fontWeight: 500,
-                        }}
-                      >
-                        Price
-                      </span>
-                      <span style={{ fontSize: '1.25rem', color: '#666' }}>→</span>
-                    </div>
-                  </div>
-
-                  {/* Category row */}
-                  <div>
-                    <div
-                      onClick={() => setFilterView('category')}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '1rem 0',
-                        borderBottom: '1px solid #E0E0E0',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '1rem',
-                          color: '#000',
-                          fontWeight: 500,
-                        }}
-                      >
-                        Category
-                      </span>
-                      <span style={{ fontSize: '1.25rem', color: '#666' }}>→</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {filterView === 'price' && (
-              <motion.div
-                key="price"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div
-                  onClick={() => setFilterView('main')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '1.5rem',
-                    cursor: 'pointer',
-                    padding: '0.5rem 0',
-                  }}
-                >
-                  <span style={{ fontSize: '1.25rem', color: '#666' }}>←</span>
-                  <span
-                    style={{
-                      fontSize: '1rem',
-                      color: '#000',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Price
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1.5rem',
-                    paddingBottom: '1rem',
-                    borderBottom: '1px solid #E0E0E0',
-                  }}
-                >
-                  <span style={{ fontSize: '0.95rem', color: '#666' }}>
-                    The highest price is ₱
-                    {highestPrice.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-                    <button
-                      onClick={handleResetPrice}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#000',
-                        textDecoration: 'underline',
-                        fontSize: '0.95rem',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                {/* Inputs */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.9rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      From
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.75rem 0.5rem',
-                          fontSize: '0.95rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceFrom}
-                        onChange={e =>
-                          setFilters(prev => ({
-                            ...prev,
-                            priceFrom: e.target.value,
-                          }))
-                        }
-                        placeholder="0"
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.75rem',
-                          border: 'none',
-                          fontSize: '0.95rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.9rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      To
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.75rem 0.5rem',
-                          fontSize: '0.95rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceTo}
-                        onChange={e =>
-                          setFilters(prev => ({
-                            ...prev,
-                            priceTo: e.target.value,
-                          }))
-                        }
-                        placeholder={highestPrice.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.75rem',
-                          border: 'none',
-                          fontSize: '0.95rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {filterView === 'category' && (
-              <motion.div
-                key="category"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div
-                  onClick={() => setFilterView('main')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '1.5rem',
-                    cursor: 'pointer',
-                    padding: '0.5rem 0',
-                  }}
-                >
-                  <span style={{ fontSize: '1.25rem', color: '#666' }}>←</span>
-                  <span
-                    style={{
-                      fontSize: '1rem',
-                      color: '#000',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Category
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1rem',
-                    paddingBottom: '1rem',
-                    borderBottom: '1px solid #E0E0E0',
-                  }}
-                >
-                  <span style={{ fontSize: '0.95rem', color: '#666' }}>
-                    {selectedCategoryCount} selected
-                  </span>
-                  {selectedCategoryCount > 0 && (
-                    <button
-                      onClick={handleResetCategory}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#000',
-                        textDecoration: 'underline',
-                        fontSize: '0.95rem',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    maxHeight: '400px',
-                    overflowY: 'auto',
-                  }}
-                >
-                  {allCategories.map(category => (
-                    <label
-                      key={category}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.75rem 0',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #F0F0F0',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.categories.includes(category)}
-                        onChange={() => handleCategoryToggle(category)}
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          cursor: 'pointer',
-                          accentColor: '#000',
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontSize: '0.95rem',
-                          color: '#333',
-                          flex: 1,
-                        }}
-                      >
-                        {category}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.95rem',
-                          color: '#666',
-                        }}
-                      >
-                        ({categoryCounts[category]})
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Sort section in drawer */}
-          <div style={{ marginTop: '2rem' }}>
-            <div style={{ marginBottom: '0.75rem' }}>
-              <span
-                style={{
-                  fontSize: '1rem',
-                  color: '#000',
-                  fontWeight: 500,
-                }}
-              >
-                Sort by:
-              </span>
-            </div>
-            <select
-              value={selectedCollectionId || 'all'}
-              onChange={e => handleCollectionChange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #CCCCCC',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                cursor: 'pointer',
-                backgroundColor: '#FFFFFF',
-              }}
-            >
-              <option value="all">All collections</option>
-              {collections.length > 0 &&
-                collections.map((collection) => (
-                  <option
-                    key={collection.id}
-                    value={collection.id}
-                  >
-                    {collection.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Drawer footer */}
-        <div
-          style={{
-            padding: '1.5rem',
-            borderTop: '1px solid #E0E0E0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '1rem',
-            position: 'sticky',
-            bottom: 0,
-            backgroundColor: '#FFFFFF',
-            zIndex: 1,
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleRemoveAll}
-            className="remove-all-button"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#000',
-              borderBottom: '1px solid #000',
-              fontSize: '0.95rem',
-              cursor: 'pointer',
-              padding: '0.3rem 0',
-            }}
-          >
-            Remove all
-          </button>
-          <button
-            type="button"
-            onClick={handleApplyFilters}
-            className="apply-filters-button"
-            style={{
-              flex: 1,
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#000',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Apply
-          </button>
-        </div>
-      </motion.div>
-
+    <div style={{ minHeight: '100vh', position: 'relative', overflowX: 'hidden', width: '100%' }}>
       {/* Main content */}
       <section
         className="products-page-section"
-        style={{ padding: '3rem 1rem 4rem', backgroundColor: '#FFFFFF' }}
+        style={{ 
+          backgroundColor: '#FFFFFF',
+          position: 'relative',
+          paddingTop: 'var(--navbar-height, 0)',
+          paddingBottom: '4rem',
+          paddingLeft: '1rem',
+          paddingRight: '1rem',
+          marginTop: '0px',
+          overflowX: 'hidden',
+          width: '100%',
+          maxWidth: '100vw',
+        }}
       >
         <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
           {/* Title */}
-          <h1
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
             className="products-page-title"
             style={{
               fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
@@ -1288,623 +715,40 @@ const Products = () => {
             }}
           >
             Products
-          </h1>
+          </motion.h1>
 
-          {/* Mobile filter button */}
-          <div
-            className="mobile-filter-button-wrapper"
-            style={{
-              display: 'none',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.5rem',
-              marginBottom: '1.5rem',
-              padding: '0.75rem 1rem',
-              backgroundColor: '#F5F5F5',
-              borderRadius: '4px',
-            }}
+          {/* Filter and Sort Component */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, margin: '-100px' }}
+            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                fontSize: '0.95rem',
-                color: '#333',
-                fontWeight: 500,
+            <FilterAndSort
+              collections={collections}
+              selectedCollectionId={selectedCollectionId}
+              onCollectionChange={(value) => {
+                handleCollectionChange(value);
+                setCurrentPage(1);
               }}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="4" y1="6" x2="20" y2="6" />
-                <line x1="4" y1="12" x2="20" y2="12" />
-                <line x1="4" y1="18" x2="20" y2="18" />
-                <circle cx="8" cy="6" r="2" fill="currentColor" />
-                <circle cx="16" cy="12" r="2" fill="currentColor" />
-                <circle cx="8" cy="18" r="2" fill="currentColor" />
-              </svg>
-              <span className="filter-sort-text">Filter and sort</span>
-            </button>
-            <span style={{ fontSize: '0.95rem', color: '#666' }}>
-              {filteredAndSortedProducts.length} of {sourceProducts.length} products
-            </span>
-          </div>
-
-          {/* Desktop overlay for dropdowns */}
-          {expandedFilter && (
-            <div
-              onClick={() => setExpandedFilter(null)}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                backgroundColor: 'transparent',
-                zIndex: 900,
+              sortBy={sortBy}
+              onSortChange={(value) => {
+                setSortBy(value);
+                setCurrentPage(1);
               }}
-              aria-hidden="true"
+              filters={filters}
+              onFiltersChange={(newFilters) => {
+                setFilters(newFilters);
+                setCurrentPage(1);
+              }}
+              allCategories={allCategories}
+              categoryCounts={categoryCounts}
+              highestPrice={highestPrice}
+              filteredCount={filteredAndSortedProducts.length}
+              totalCount={sourceProducts.length}
+              onClearAll={handleRemoveAll}
             />
-          )}
-
-          {/* Desktop filter and sort bar */}
-          <div
-            className="desktop-filter-bar"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '1rem',
-              marginBottom: '2rem',
-              paddingBottom: '1rem',
-              borderBottom: '1px solid #E0E0E0',
-              position: 'relative',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                flexWrap: 'wrap',
-                position: 'relative',
-              }}
-            >
-              <span
-                style={{ fontSize: '0.95rem', color: '#333', fontWeight: 500 }}
-              >
-                Filter:
-              </span>
-
-              {/* Price panel */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedFilter(
-                      expandedFilter === 'price' ? null : 'price'
-                    )
-                  }
-                  style={{
-                    padding: '0.5rem 1rem',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '0.95rem',
-                    cursor: 'pointer',
-                    backgroundColor: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    minWidth: '120px',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <span>Price</span>
-                  <span style={{ fontSize: '0.8rem' }}>▼</span>
-                </button>
-                {expandedFilter === 'price' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      marginTop: '0.5rem',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #CCCCCC',
-                      borderRadius: '4px',
-                      padding: '1rem',
-                      minWidth: '300px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      zIndex: 1000,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '1rem',
-                        paddingBottom: '0.75rem',
-                        borderBottom: '1px solid #E0E0E0',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.9rem', color: '#666' }}>
-                        The highest price is ₱
-                        {highestPrice.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                      {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-                        <button
-                          onClick={handleResetPrice}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#000',
-                            textDecoration: 'underline',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer',
-                            padding: 0,
-                          }}
-                        >
-                          Reset
-                        </button>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '0.75rem',
-                        alignItems: 'flex-end',
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <label
-                          style={{
-                            display: 'block',
-                            fontSize: '0.85rem',
-                            color: '#666',
-                            marginBottom: '0.5rem',
-                          }}
-                        >
-                          From
-                        </label>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            border: '1px solid #CCCCCC',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <span
-                            style={{
-                              padding: '0.5rem 0.4rem',
-                              fontSize: '0.9rem',
-                              color: '#666',
-                              backgroundColor: '#F5F5F5',
-                            }}
-                          >
-                            ₱
-                          </span>
-                          <input
-                            type="number"
-                            value={filters.priceFrom}
-                            onChange={e => {
-                              setFilters(prev => ({
-                                ...prev,
-                                priceFrom: e.target.value,
-                              }));
-                              setCurrentPage(1);
-                            }}
-                            placeholder="0"
-                            min="0"
-                            style={{
-                              flex: 1,
-                              padding: '0.5rem',
-                              border: 'none',
-                              fontSize: '0.9rem',
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label
-                          style={{
-                            display: 'block',
-                            fontSize: '0.85rem',
-                            color: '#666',
-                            marginBottom: '0.5rem',
-                          }}
-                        >
-                          To
-                        </label>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            border: '1px solid #CCCCCC',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <span
-                            style={{
-                              padding: '0.5rem 0.4rem',
-                              fontSize: '0.9rem',
-                              color: '#666',
-                              backgroundColor: '#F5F5F5',
-                            }}
-                          >
-                            ₱
-                          </span>
-                          <input
-                            type="number"
-                            value={filters.priceTo}
-                            onChange={e => {
-                              setFilters(prev => ({
-                                ...prev,
-                                priceTo: e.target.value,
-                              }));
-                              setCurrentPage(1);
-                            }}
-                            placeholder={highestPrice.toLocaleString('en-US', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                            min="0"
-                            style={{
-                              flex: 1,
-                              padding: '0.5rem',
-                              border: 'none',
-                              fontSize: '0.9rem',
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Category panel */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedFilter(
-                      expandedFilter === 'category' ? null : 'category'
-                    )
-                  }
-                  style={{
-                    padding: '0.5rem 1rem',
-                    border: '1px solid #CCCCCC',
-                    borderRadius: '4px',
-                    fontSize: '0.95rem',
-                    cursor: 'pointer',
-                    backgroundColor: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    minWidth: '120px',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <span>Category</span>
-                  <span style={{ fontSize: '0.8rem' }}>▼</span>
-                </button>
-                {expandedFilter === 'category' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      marginTop: '0.5rem',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #CCCCCC',
-                      borderRadius: '4px',
-                      padding: '1rem',
-                      minWidth: '280px',
-                      maxWidth: '400px',
-                      maxHeight: '400px',
-                      overflowY: 'auto',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      zIndex: 1000,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '1rem',
-                        paddingBottom: '0.75rem',
-                        borderBottom: '1px solid #E0E0E0',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.9rem', color: '#666' }}>
-                        {selectedCategoryCount} selected
-                      </span>
-                      {selectedCategoryCount > 0 && (
-                        <button
-                          onClick={handleResetCategory}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#000',
-                            textDecoration: 'underline',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer',
-                            padding: 0,
-                          }}
-                        >
-                          Reset
-                        </button>
-                      )}
-                    </div>
-                    <div
-                      style={{ maxHeight: '300px', overflowY: 'auto' }}
-                    >
-                      {allCategories.map(category => (
-                        <label
-                          key={category}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '0.5rem 0',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid #F0F0F0',
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filters.categories.includes(category)}
-                            onChange={() => {
-                              handleCategoryToggle(category);
-                              setCurrentPage(1);
-                            }}
-                            style={{
-                              width: '18px',
-                              height: '18px',
-                              cursor: 'pointer',
-                              accentColor: '#000',
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: '0.9rem',
-                              color: '#333',
-                              flex: 1,
-                            }}
-                          >
-                            {category}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.9rem',
-                              color: '#666',
-                            }}
-                          >
-                            ({categoryCounts[category]})
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </div>
-
-            {/* Sort bar */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span
-                style={{ fontSize: '0.95rem', color: '#333', fontWeight: 500 }}
-              >
-                Browse by collection:
-              </span>
-              <select
-                value={selectedCollectionId || 'all'}
-                onChange={e => handleCollectionChange(e.target.value)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  fontSize: '0.95rem',
-                  cursor: 'pointer',
-                  backgroundColor: '#FFFFFF',
-                  minWidth: '200px',
-                }}
-              >
-                <option value="all">All collections</option>
-                {collections.length > 0 &&
-                  collections.map((collection) => (
-                    <option
-                      key={collection.id}
-                      value={collection.id}
-                    >
-                      {collection.name}
-                    </option>
-                  ))}
-              </select>
-              <span style={{ fontSize: '0.95rem', color: '#666' }}>
-                {filteredAndSortedProducts.length} of {sourceProducts.length} products
-              </span>
-            </div>
-          </div>
-
-          {/* Active filters chips */}
-          {(filters.priceFrom !== '' ||
-            filters.priceTo !== '' ||
-            filters.categories.length > 0) && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                flexWrap: 'wrap',
-                marginBottom: '2rem',
-                paddingBottom: '1rem',
-                borderBottom: '1px solid #E0E0E0',
-              }}
-            >
-              {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.5rem 0.75rem',
-                    backgroundColor: '#F5F5F5',
-                    borderRadius: '20px',
-                    fontSize: '0.9rem',
-                    color: '#333',
-                  }}
-                >
-                  <span>
-                    ₱
-                    {filters.priceFrom === ''
-                      ? '0'
-                      : parseFloat(filters.priceFrom).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{' '}
-                    - ₱
-                    {filters.priceTo === ''
-                      ? highestPrice.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      : parseFloat(filters.priceTo).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                  </span>
-                  <button
-                    onClick={handleResetPrice}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                    }}
-                    aria-label="Remove price filter"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-
-              {filters.categories.map(category => (
-                <div
-                  key={category}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.5rem 0.75rem',
-                    backgroundColor: '#F5F5F5',
-                    borderRadius: '20px',
-                    fontSize: '0.9rem',
-                    color: '#333',
-                  }}
-                >
-                  <span>Category: {category}</span>
-                  <button
-                    onClick={() => handleCategoryToggle(category)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                    }}
-                    aria-label={`Remove ${category} filter`}
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-
-              <button
-                onClick={handleRemoveAll}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#000',
-                  textDecoration: 'underline',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  padding: '0.5rem 0',
-                  marginLeft: 'auto',
-                }}
-              >
-                Remove all
-              </button>
-            </div>
-          )}
+          </motion.div>
 
           {/* Loading state, no products, or grid */}
           {loading ? (
@@ -2192,6 +1036,7 @@ const Products = () => {
 
                       {/* Feature bar */}
                       <div
+                        className="product-feature-bar"
                         style={{
                           backgroundColor: '#E8F5E9',
                           padding: '0.5rem 0.75rem',
@@ -2203,6 +1048,7 @@ const Products = () => {
                         }}
                       >
                         <svg
+                          className="feature-bar-icon"
                           width="16"
                           height="16"
                           viewBox="0 0 24 24"
@@ -2214,15 +1060,24 @@ const Products = () => {
                           <line x1="9" y1="3" x2="9" y2="21" />
                           <line x1="3" y1="9" x2="21" y2="9" />
                         </svg>
-                        <span>
+                        <span className="feature-bar-text-full" style={{ 
+                          lineHeight: 1.3,
+                        }}>
                           Google Sheets Document | Easy to use | Mobile
                           Compatibility
+                        </span>
+                        <span className="feature-bar-text-mobile" style={{ 
+                          lineHeight: 1.3,
+                          display: 'none',
+                        }}>
+                          Google Sheets
                         </span>
                       </div>
 
                       {/* Title + price */}
-                      <div style={{ padding: '0.75rem', flex: 1 }}>
+                      <div className="product-card-content" style={{ padding: '0.75rem', flex: 1 }}>
                         <h3
+                          className="product-title"
                           style={{
                             fontSize: '0.9rem',
                             fontWeight: 600,
@@ -2234,6 +1089,7 @@ const Products = () => {
                           {product.title}
                         </h3>
                         <div
+                          className="product-price-container"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -2243,6 +1099,7 @@ const Products = () => {
                         >
                           {product.oldPrice && (
                             <span
+                              className="product-old-price"
                               style={{
                                 fontSize: '0.9rem',
                                 color: '#999',
@@ -2258,6 +1115,7 @@ const Products = () => {
                             </span>
                           )}
                           <span
+                            className="product-price"
                             style={{
                               fontSize: product.oldPrice ? '1rem' : '1.1rem',
                               fontWeight: 600,
@@ -2363,6 +1221,227 @@ const Products = () => {
       </section>
 
       <EmailSubscribeFooter />
+
+      {/* Responsive CSS for mobile only */}
+      <style>{`
+        /* Prevent horizontal overflow and flickering - Global fixes (excluding navbar) */
+        html, body {
+          overflow-x: hidden !important;
+          width: 100% !important;
+          max-width: 100vw !important;
+          position: relative !important;
+        }
+        
+        #root {
+          overflow-x: hidden !important;
+          width: 100% !important;
+          max-width: 100vw !important;
+          position: relative !important;
+        }
+        
+        /* Prevent main containers from causing overflow (excluding navbar) */
+        main, section:not(.navbar), article, div[class*="container"]:not(.navbar-wrapper):not(.navbar-icons-wrapper), div[class*="wrapper"]:not(.navbar-wrapper):not(.navbar-icons-wrapper) {
+          max-width: 100vw !important;
+          overflow-x: hidden !important;
+        }
+        
+        /* Products page specific - Only overflow fixes, no padding changes */
+        .products-page-section {
+          overflow-x: hidden !important;
+          width: 100% !important;
+          max-width: 100vw !important;
+          position: relative !important;
+        }
+        
+        /* Ensure inner container matches Hero component exactly on large screens */
+        @media (min-width: 769px) {
+          .products-page-section > div {
+            max-width: 1100px !important;
+            margin: 0 auto !important;
+          }
+        }
+        
+        .products-page-section > div {
+          overflow-x: hidden !important;
+          box-sizing: border-box !important;
+        }
+        
+        /* Prevent motion components from causing overflow */
+        [data-framer-component] {
+          max-width: 100vw !important;
+        }
+        
+        /* Pagination button hover effects - ONLY background color + smooth transition */
+        .pagination-button:not(:disabled) {
+          transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .pagination-page-button:not(.active):not(:disabled):hover {
+          background-color: #E5E5E5 !important;
+        }
+        
+        .pagination-page-button.active:hover {
+          background-color: #222 !important;
+        }
+        
+        .pagination-nav-button:not(:disabled):hover {
+          background-color: #E5E5E5 !important;
+        }
+        
+        .pagination-button:disabled {
+          opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+          /* Prevent horizontal scroll on mobile - Stronger constraints (excluding navbar) */
+          html, body {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            position: relative !important;
+          }
+          
+          #root {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            position: relative !important;
+          }
+          
+          *:not(.navbar):not(.navbar-wrapper):not(.navbar-icons-wrapper):not(.navbar-icon-btn):not(.navbar-cart-btn) {
+            max-width: 100vw !important;
+          }
+          
+          .products-page-section {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+          }
+          
+          .products-page-section > div {
+            margin: 0 auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow-x: hidden !important;
+          }
+          
+          /* Prevent filter panel from causing overflow */
+          .mobile-filter-button-wrapper {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+          }
+          
+          /* Prevent drawer from causing overflow during animation */
+          .mobile-filter-drawer {
+            max-width: min(80%, 400px) !important;
+            right: 0 !important;
+            overflow-x: hidden !important;
+          }
+          
+          .mobile-drawer-backdrop {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            left: 0 !important;
+            right: 0 !important;
+          }
+          
+          .products-grid,
+          .products-grid.loading {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 0.5rem !important;
+          }
+          
+          .product-card {
+            border-radius: 6px !important;
+          }
+          
+          .green-header-banner {
+            padding: 0.5rem !important;
+          }
+          
+          .green-header-banner > div {
+            font-size: 0.65rem !important;
+            line-height: 1.2 !important;
+          }
+          
+          .product-feature-bar {
+            padding: 0.4rem 0.5rem !important;
+            font-size: 0.65rem !important;
+            gap: 0.3rem !important;
+          }
+          
+          .product-feature-bar .feature-bar-icon {
+            width: 12px !important;
+            height: 12px !important;
+          }
+          
+          .product-feature-bar .feature-bar-text-full {
+            display: none !important;
+          }
+          
+          .product-feature-bar .feature-bar-text-mobile {
+            display: inline !important;
+          }
+          
+          .product-card-content {
+            padding: 0.5rem !important;
+          }
+          
+          .product-title {
+            font-size: 0.8rem !important;
+            margin-bottom: 0.4rem !important;
+          }
+          
+          .product-old-price {
+            font-size: 0.75rem !important;
+          }
+          
+          .product-price {
+            font-size: 0.85rem !important;
+          }
+          
+          .product-price-container {
+            gap: 0.3rem !important;
+          }
+          
+          .products-page-title {
+            font-size: 1.5rem !important;
+            margin-bottom: 1rem !important;
+          }
+          
+          .pagination-wrapper {
+            gap: 0.25rem !important;
+            margin-bottom: 2rem !important;
+          }
+          
+          .pagination-button {
+            padding: 0.4rem 0.75rem !important;
+            font-size: 0.875rem !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .products-grid,
+          .products-grid.loading {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 0.5rem !important;
+          }
+          
+          .product-card-skeleton {
+            min-height: auto !important;
+          }
+        }
+        
+        @media (max-width: 360px) {
+          .products-grid,
+          .products-grid.loading {
+            gap: 0.4rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

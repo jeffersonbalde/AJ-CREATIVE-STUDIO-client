@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import confetti from 'canvas-confetti';
+import PublicLogin from '../pages/public/auth/Login';
 
 const formatPHP = (value) =>
   new Intl.NumberFormat('en-PH', {
@@ -15,6 +17,8 @@ const formatPHP = (value) =>
 const CartPanel = () => {
   const navigate = useNavigate();
   const { cartOpen, setCartOpen, cartItems, updateQuantity, removeFromCart, getCartTotal, getCartItemCount } = useCart();
+  const { isAuthenticated } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const hasFiredConfettiRef = useRef(false);
   const cartPanelRef = useRef(null);
@@ -145,24 +149,7 @@ const CartPanel = () => {
       ? `Congratulations ${formatPHP(discountAmount)} OFF applied to your entire order!`
       : `You are ${itemsRemaining} item${itemsRemaining !== 1 ? 's' : ''} away from ${nextTier}`;
 
-  // Lock page scroll when cart panel is open
-  useEffect(() => {
-    const originalBodyOverflow = document.body.style.overflowY;
-    const originalHtmlOverflow = document.documentElement.style.overflowY;
-
-    if (cartOpen) {
-      document.body.style.overflowY = 'hidden';
-      document.documentElement.style.overflowY = 'hidden';
-    } else {
-      document.body.style.overflowY = originalBodyOverflow || '';
-      document.documentElement.style.overflowY = originalHtmlOverflow || '';
-    }
-
-    return () => {
-      document.body.style.overflowY = originalBodyOverflow || '';
-      document.documentElement.style.overflowY = originalHtmlOverflow || '';
-    };
-  }, [cartOpen]);
+  // Note: we no longer lock page scroll when the cart is open to avoid layout shifts.
 
   // Fire confetti once when max discount is reached while cart is open
   useEffect(() => {
@@ -213,51 +200,52 @@ const CartPanel = () => {
   }, [cartOpen, isMaxDiscount]);
 
   return (
-    <AnimatePresence>
-      {cartOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              zIndex: 9999,
-            }}
-            onClick={() => setCartOpen(false)}
-          />
-          
-          {/* Cart Panel */}
-          <motion.div
-            className="cart-panel"
-            ref={cartPanelRef}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              width: '100%',
-              maxWidth: '400px',
-              height: '100vh',
-              maxHeight: '100vh', // Ensure it doesn't exceed viewport
-              backgroundColor: '#FFFFFF',
-              boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
-              zIndex: 10000,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden', // Prevent outer scroll, let inner content scroll
-            }}
-          >
+    <>
+      <AnimatePresence>
+        {cartOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                zIndex: 9999,
+              }}
+              onClick={() => setCartOpen(false)}
+            />
+            
+            {/* Cart Panel */}
+            <motion.div
+              className="cart-panel"
+              ref={cartPanelRef}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: '100%',
+                maxWidth: '400px',
+                height: '100vh',
+                maxHeight: '100vh', // Ensure it doesn't exceed viewport
+                backgroundColor: '#FFFFFF',
+                boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
+                zIndex: 10000,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden', // Prevent outer scroll, let inner content scroll
+              }}
+            >
             {/* Cart Header */}
             <div style={{
               padding: '1.5rem',
@@ -338,68 +326,7 @@ const CartPanel = () => {
               overflowY: 'auto', // Enable scrolling on the content area
               WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
             }}>
-              {/* Discount Progress Panel - only show when there are items */}
-              {cartItems.length > 0 && (
-                <div
-                  className="cart-discount-panel"
-                  style={{
-                    marginBottom: '1.5rem',
-                    paddingBottom: '1.25rem',
-                    borderBottom: '1px solid #E0E0E0',
-                    position: 'relative',
-                    overflow: 'visible',
-                  }}
-                >
-                  {(() => {
-                    return (
-                      <>
-                        <p
-                          style={{
-                            textAlign: 'center',
-                            fontWeight: 600,
-                            marginBottom: '0.5rem',
-                            fontSize: '0.95rem',
-                          }}
-                        >
-                          {discountTopText}
-                        </p>
-                        <div
-                          style={{
-                            width: '100%',
-                            height: '10px',
-                            borderRadius: '999px',
-                            backgroundColor: '#E5E5E5',
-                            overflow: 'hidden',
-                            marginBottom: '0.75rem',
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${progress * 100}%`,
-                              height: '100%',
-                              backgroundColor: '#4F7F5A',
-                              transition: 'width 0.3s ease',
-                            }}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontSize: '0.75rem',
-                            color: '#666',
-                          }}
-                        >
-                          <span>0</span>
-                          <span>10% OFF</span>
-                          <span>20% OFF</span>
-                          <span>30% OFF</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+              {/* Discount progress promo removed – no top progress bar / message */}
               {cartItems.length === 0 ? (
                 <div style={{
                   display: 'flex',
@@ -689,190 +616,6 @@ const CartPanel = () => {
                     borderTop: '1px solid #E0E0E0',
                     paddingTop: '1.5rem',
                   }}>
-                    {/* Discount Dropdown/Badge - Only show if user qualifies for at least one discount (3+ items) */}
-                    {itemsCount >= 3 && (
-                      <div style={{ marginBottom: '1rem', position: 'relative' }} ref={dropdownRef}>
-                        {discountPercent > 0 ? (
-                        // Show badge when discount is applied
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          backgroundColor: '#F5F5F5',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '4px',
-                        }}>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                          }}>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="#666"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                              <line x1="3" y1="6" x2="21" y2="6" />
-                              <path d="M16 10a4 4 0 0 1-8 0" />
-                            </svg>
-                            <span style={{
-                              fontSize: '0.85rem',
-                              fontWeight: 600,
-                              color: '#333',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.3px',
-                            }}>
-                              {getDiscountBadgeText()}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleRemoveDiscount}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#E8E8E8';
-                              e.currentTarget.style.color = '#D32F2F';
-                              e.currentTarget.style.transform = 'scale(1.1)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              e.currentTarget.style.color = '#666';
-                              e.currentTarget.style.transform = 'scale(1)';
-                            }}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#666',
-                              cursor: 'pointer',
-                              padding: '0.35rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '1rem',
-                              borderRadius: '50%',
-                              transition: 'all 0.2s ease',
-                              width: '24px',
-                              height: '24px',
-                            }}
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="20"
-                              height="20"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <line x1="18" y1="6" x2="6" y2="18" />
-                              <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </button>
-                        </div>
-                      ) : (
-                        // Show dropdown when no discount or discount removed
-                        <div style={{ position: 'relative' }}>
-                          <div
-                            onClick={() => setDropdownOpen(!dropdownOpen)}
-                            style={{
-                              width: '100%',
-                              padding: '0.75rem',
-                              border: '1px solid #E0E0E0',
-                              borderRadius: '4px',
-                              backgroundColor: '#FFFFFF',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              fontSize: '0.95rem',
-                              color: selectedDiscount === 'none' || discountPercent === 0 ? '#999' : '#000',
-                            }}
-                          >
-                            <span>
-                              {selectedDiscount === 'none' || discountPercent === 0 
-                                ? 'Select discount' 
-                                : getDiscountOptions().find(opt => opt.value === selectedDiscount)?.label || 'Select discount'}
-                            </span>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="#666"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              style={{
-                                transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                                transition: 'transform 0.2s ease',
-                              }}
-                            >
-                              <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                          </div>
-                          
-                          {dropdownOpen && (
-                            <div style={{
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              right: 0,
-                              marginTop: '4px',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid #E0E0E0',
-                              borderRadius: '4px',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                              zIndex: 1000,
-                              maxHeight: '200px',
-                              overflowY: 'auto',
-                            }}>
-                              {getDiscountOptions().map((option, index) => {
-                                const isSelected = (index === 0 && (selectedDiscount === 'none' || selectedDiscount === null)) || 
-                                                  (option.value === selectedDiscount && selectedDiscount !== 'none');
-                                return (
-                                  <div
-                                    key={option.value}
-                                    onClick={() => handleDiscountSelect(option.value)}
-                                    style={{
-                                      padding: '0.75rem',
-                                      cursor: 'pointer',
-                                      backgroundColor: isSelected ? '#0066CC' : '#FFFFFF',
-                                      color: isSelected ? '#FFFFFF' : '#000',
-                                      fontSize: '0.95rem',
-                                      borderBottom: index < getDiscountOptions().length - 1 ? '1px solid #F0F0F0' : 'none',
-                                      transition: 'background-color 0.2s ease',
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      if (!isSelected) {
-                                        e.currentTarget.style.backgroundColor = '#F5F5F5';
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (!isSelected) {
-                                        e.currentTarget.style.backgroundColor = '#FFFFFF';
-                                      }
-                                    }}
-                                  >
-                                    {option.label}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      </div>
-                    )}
-
                     {/* Subtotal */}
                     <div style={{
                       display: 'flex',
@@ -915,7 +658,11 @@ const CartPanel = () => {
                       }}
                       onClick={() => {
                         setCartOpen(false);
-                        navigate('/checkout');
+                        if (!isAuthenticated) {
+                          setShowLoginModal(true);
+                        } else {
+                          navigate('/checkout');
+                        }
                       }}
                     >
                       Checkout
@@ -925,9 +672,16 @@ const CartPanel = () => {
               )}
             </div>
           </motion.div>
-        </>
+          </>
+        )}
+      </AnimatePresence>
+      {showLoginModal && (
+        <PublicLogin
+          onClose={() => setShowLoginModal(false)}
+          returnTo="/checkout"
+        />
       )}
-    </AnimatePresence>
+    </>
   );
 };
 

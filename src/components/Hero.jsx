@@ -9,8 +9,28 @@ import 'swiper/css/pagination';
 const Hero = ({ onSlideChange, swiperRef }) => {
   const [scrollDirection, setScrollDirection] = useState("down");
   const [isVisible, setIsVisible] = useState(false);
+  const [navbarHeight, setNavbarHeight] = useState(0);
   const lastScrollY = useRef(0);
   const sectionRef = useRef(null);
+
+  useEffect(() => {
+    // Get navbar height from CSS variable and update on resize
+    const updateNavbarHeight = () => {
+      const height = getComputedStyle(document.documentElement).getPropertyValue('--navbar-height');
+      if (height) {
+        setNavbarHeight(parseInt(height, 10) || 0);
+      }
+    };
+
+    updateNavbarHeight();
+    const interval = setInterval(updateNavbarHeight, 100);
+    window.addEventListener('resize', updateNavbarHeight);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', updateNavbarHeight);
+    };
+  }, []);
 
   useEffect(() => {
     // Track scroll direction
@@ -85,7 +105,13 @@ const Hero = ({ onSlideChange, swiperRef }) => {
       backgroundColor: '#FFFFFF',
       position: 'relative',
       // Match horizontal padding pattern of ShopByCategory (3rem top, 1rem sides, 4rem bottom)
-      padding: '3rem 1rem 4rem',
+      // Responsive: uses CSS variable that updates on resize for consistent spacing across all screen sizes
+      // Same spacing on mobile and desktop - uses navbar height directly
+      paddingTop: 'var(--navbar-height, 0)',
+      paddingLeft: '1rem',
+      paddingRight: '1rem',
+      paddingBottom: '4rem',
+      marginTop: '0px',
     }}>
       {/* Background pattern covering the entire hero-wrapper area */}
       <motion.div
