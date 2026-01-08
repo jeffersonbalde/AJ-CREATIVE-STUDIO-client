@@ -201,51 +201,51 @@ const CartPanel = () => {
 
   return (
     <>
-      <AnimatePresence>
-        {cartOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                zIndex: 9999,
-              }}
-              onClick={() => setCartOpen(false)}
-            />
-            
-            {/* Cart Panel */}
-            <motion.div
-              className="cart-panel"
-              ref={cartPanelRef}
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                width: '100%',
-                maxWidth: '400px',
-                height: '100vh',
-                maxHeight: '100vh', // Ensure it doesn't exceed viewport
-                backgroundColor: '#FFFFFF',
-                boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
-                zIndex: 10000,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden', // Prevent outer scroll, let inner content scroll
-              }}
-            >
+    <AnimatePresence>
+      {cartOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 9999,
+            }}
+            onClick={() => setCartOpen(false)}
+          />
+          
+          {/* Cart Panel */}
+          <motion.div
+            className="cart-panel"
+            ref={cartPanelRef}
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              width: '100%',
+              maxWidth: '400px',
+              height: '100vh',
+              maxHeight: '100vh', // Ensure it doesn't exceed viewport
+              backgroundColor: '#FFFFFF',
+              boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
+              zIndex: 10000,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden', // Prevent outer scroll, let inner content scroll
+            }}
+          >
             {/* Cart Header */}
             <div style={{
               padding: '1.5rem',
@@ -657,10 +657,10 @@ const CartPanel = () => {
                         marginTop: '0.25rem',
                       }}
                       onClick={() => {
-                        setCartOpen(false);
                         if (!isAuthenticated) {
                           setShowLoginModal(true);
                         } else {
+                          setCartOpen(false);
                           navigate('/checkout');
                         }
                       }}
@@ -672,15 +672,18 @@ const CartPanel = () => {
               )}
             </div>
           </motion.div>
-          </>
+        </>
+      )}
+    </AnimatePresence>
+      <AnimatePresence>
+        {showLoginModal && (
+          <PublicLogin
+            key="login-modal"
+            onClose={() => setShowLoginModal(false)}
+            returnTo="/checkout"
+          />
         )}
       </AnimatePresence>
-      {showLoginModal && (
-        <PublicLogin
-          onClose={() => setShowLoginModal(false)}
-          returnTo="/checkout"
-        />
-      )}
     </>
   );
 };

@@ -51,11 +51,15 @@ const ProtectedRoute = ({ children }) => {
 
 const AppContent = () => {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isAuthRoute = location.pathname.startsWith('/auth');
+  const backgroundLocation = location.state?.backgroundLocation;
+  const mainLocation = backgroundLocation || location;
+
+  const isAdminRoute = mainLocation.pathname.startsWith('/admin');
+  const isAuthRoute = mainLocation.pathname.startsWith('/auth');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Keep main site UI visible when auth is shown as a modal over an existing page */}
       {!isAdminRoute && !isAuthRoute && (
         <>
           <Navbar />
@@ -64,95 +68,104 @@ const AppContent = () => {
       )}
 
       <div className={isAdminRoute ? "" : "main-content-wrapper"}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/all-products" element={<Products />} />
-          <Route path="/products/:slug" element={<ProductDetail />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/auth/login" element={<PublicLogin />} />
-          <Route path="/auth/signup" element={<Signup />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/gcash-payment" element={<GcashPayment />} />
+        {/* Main routes render the "background" location if a modal route is open */}
+        <Routes location={mainLocation}>
+            {/* Public Routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/all-products" element={<Products />} />
+            <Route path="/products/:slug" element={<ProductDetail />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/auth/login" element={<PublicLogin />} />
+            <Route path="/auth/signup" element={<Signup />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/gcash-payment" element={<GcashPayment />} />
 
-                {/* Admin Routes */}
-                <Route path="/admin/login" element={<Login />} />
-                <Route
-                  path="/admin/dashboard"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout><AdminDashboard /></SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/products"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout><ProductList /></SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/products/categories"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout><ProductCategories /></SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/products/collections"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout><ProductCollections /></SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/landing-page-sections"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout><LandingPageSections /></SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/profile"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout>
-                        <div className="container-fluid px-3 py-2">
-                          <h1>Profile</h1>
-                          <p>Profile page coming soon...</p>
-                        </div>
-                      </SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/admin/settings"
-                  element={
-                    <ProtectedRoute>
-                      <SidebarLayout>
-                        <div className="container-fluid px-3 py-2">
-                          <h1>Settings</h1>
-                          <p>Settings page coming soon...</p>
-                        </div>
-                      </SidebarLayout>
-                    </ProtectedRoute>
-                  }
-                />
+            {/* Admin Routes */}
+            <Route path="/admin/login" element={<Login />} />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><AdminDashboard /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/products"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ProductList /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/products/categories"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ProductCategories /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/products/collections"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ProductCollections /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/landing-page-sections"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><LandingPageSections /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/profile"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout>
+                    <div className="container-fluid px-3 py-2">
+                      <h1>Profile</h1>
+                      <p>Profile page coming soon...</p>
+                    </div>
+                  </SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout>
+                    <div className="container-fluid px-3 py-2">
+                      <h1>Settings</h1>
+                      <p>Settings page coming soon...</p>
+                    </div>
+                  </SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Legacy routes still mapped to Home for now */}
-          <Route path="/bundles" element={<Home />} />
-          <Route path="/planners" element={<Home />} />
-          <Route path="/small-business" element={<Home />} />
-          <Route path="/personal-budget" element={<Home />} />
-          <Route path="/social-media" element={<Home />} />
-          <Route path="/productivity" element={<Home />} />
-          <Route path="/printables" element={<Home />} />
+            {/* Legacy routes still mapped to Home for now */}
+            <Route path="/bundles" element={<Home />} />
+            <Route path="/planners" element={<Home />} />
+            <Route path="/small-business" element={<Home />} />
+            <Route path="/personal-budget" element={<Home />} />
+            <Route path="/social-media" element={<Home />} />
+            <Route path="/productivity" element={<Home />} />
+            <Route path="/printables" element={<Home />} />
         </Routes>
+
+        {/* Modal routes render on top of the background when opened with `state.backgroundLocation` */}
+        {backgroundLocation && (
+          <Routes location={location}>
+            <Route path="/auth/login" element={<PublicLogin />} />
+            <Route path="/auth/signup" element={<Signup />} />
+          </Routes>
+        )}
       </div>
     </div>
   );
