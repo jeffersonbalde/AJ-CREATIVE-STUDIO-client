@@ -254,7 +254,15 @@ const OtpVerificationModal = ({
         )}
 
         {/* Content */}
-        <div style={{ padding: embedded ? 0 : 'clamp(1rem, 2.5vw, 1.5rem)' }}>
+        <div
+          style={{
+            // When this OTP UI is embedded inside another modal (inline/embedded mode),
+            // still give it comfortable left/right padding so it doesn't touch the edges.
+            padding: embedded
+              ? 'clamp(1rem, 2.5vw, 1.25rem) clamp(1.4rem, 4vw, 1.8rem) 1.5rem'
+              : 'clamp(1rem, 2.5vw, 1.5rem)',
+          }}
+        >
           {!hideIntro && (
             <>
               <h2 className="fw-bold mb-2" style={{ fontSize: 'clamp(1.25rem, 4vw, 1.5rem)', color: '#111' }}>
@@ -271,10 +279,13 @@ const OtpVerificationModal = ({
             <div
               className="d-flex justify-content-center mb-4"
               style={{
+                // One clean row of 6 boxes, aligned with the same left/right padding
+                // as the heading and other content.
                 flexWrap: 'nowrap',
-                overflowX: 'hidden', // no horizontal scrollbar
-                maxWidth: '100%',
+                overflowX: 'visible',
+                width: '100%',
                 gap: 'clamp(4px, 1.4vw, 8px)',
+                justifyContent: 'center',
               }}
             >
               {otp.map((digit, index) => (
@@ -349,6 +360,10 @@ const OtpVerificationModal = ({
                 color: '#000',
                 fontSize: '0.98rem',
                 marginBottom: '1rem',
+                // Align the button visually with the OTP boxes and text
+                maxWidth: '320px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
                 opacity: otp.join('').length !== 6 ? 0.6 : 1,
                 cursor: otp.join('').length !== 6 ? 'not-allowed' : 'pointer',
               }}
@@ -357,7 +372,7 @@ const OtpVerificationModal = ({
             </button>
 
             {/* Resend Code */}
-            <div className="text-center">
+            <div className="text-center" style={{ marginLeft: 0, marginRight: 0, paddingLeft: 0, paddingRight: 0 }}>
               <span style={{ fontSize: '0.9rem', color: '#666' }}>
                 Didn't receive the code?{' '}
               </span>
