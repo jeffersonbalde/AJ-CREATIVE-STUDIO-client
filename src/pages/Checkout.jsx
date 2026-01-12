@@ -32,6 +32,7 @@ const Checkout = () => {
   const [selectedDiscount, setSelectedDiscount] = useState(null); // null = auto, 'none' = no discount
   const [showScrollHint, setShowScrollHint] = useState(false);
   const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const productListRef = useRef(null);
 
@@ -509,13 +510,89 @@ const Checkout = () => {
     // TODO: Implement discount code logic
   };
 
-  const handlePayNow = () => {
-    // Navigate to GCash payment page with order total
-    navigate('/gcash-payment', {
-      state: {
-        total: discountPercent > 0 ? finalTotal : subtotal,
-      },
-    });
+  const handlePayNow = async () => {
+    // Validate required fields
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !address.trim() || !city.trim()) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setIsProcessingPayment(true);
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const amount = discountPercent > 0 ? finalTotal : subtotal;
+      
+      // Build success, cancel, and failure URLs
+      const baseUrl = window.location.origin;
+      const successUrl = `${baseUrl}/checkout/success`;
+      const cancelUrl = `${baseUrl}/checkout/cancel`;
+      const failureUrl = `${baseUrl}/checkout/failure`;
+
+      // Create order description from cart items
+      const orderDescription = cartItems.length === 1 
+        ? cartItems[0].name 
+        : `${cartItems.length} items`;
+
+      // Create PayMaya checkout session
+      // Ensure we use the correct API endpoint
+      const checkoutUrl = `${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/payments/paymaya/checkout`;
+      console.log('Calling PayMaya checkout API:', checkoutUrl);
+      
+      const response = await fetch(checkoutUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: amount,
+          order_id: `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          description: orderDescription,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          failure_url: failureUrl,
+          customer: {
+            name: `${firstName} ${lastName}`.trim(),
+            email: email.trim(),
+            phone: '', // Add phone field if needed
+          },
+        }),
+      });
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setIsProcessingPayment(false);
+        console.error('PayMaya API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData,
+        });
+        alert(errorData.message || errorData.error || `Payment failed (${response.status}). Please try again.`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('PayMaya checkout response:', data);
+
+      if (data.success && data.checkout?.redirect_url) {
+        // Redirect to PayMaya checkout page
+        console.log('Redirecting to PayMaya:', data.checkout.redirect_url);
+        // Small delay to ensure state is updated before redirect
+        setTimeout(() => {
+          window.location.href = data.checkout.redirect_url;
+        }, 100);
+      } else {
+        setIsProcessingPayment(false);
+        console.error('PayMaya checkout failed:', data);
+        alert(data.message || 'Failed to create payment session. Please try again.');
+      }
+    } catch (error) {
+      console.error('PayMaya checkout error:', error);
+      setIsProcessingPayment(false);
+      alert('Network error. Please check your connection and try again.');
+    }
   };
 
   if (cartItems.length === 0) {
@@ -1522,23 +1599,25 @@ const Checkout = () => {
 
             {/* Pay Now Button */}
             <motion.button
-              whileHover={{ y: -2, backgroundColor: '#222222' }}
-              whileTap={{ y: 0 }}
+              whileHover={!isProcessingPayment ? { y: -2, backgroundColor: '#222222' } : {}}
+              whileTap={!isProcessingPayment ? { y: 0 } : {}}
               onClick={handlePayNow}
+              disabled={isProcessingPayment}
               style={{
                 width: '100%',
                 padding: '0.9rem 1.5rem',
-                backgroundColor: '#000000',
+                backgroundColor: isProcessingPayment ? '#666' : '#000000',
                 color: '#FFFFFF',
                 border: 'none',
                 borderRadius: '4px',
                 fontSize: '0.98rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: isProcessingPayment ? 'not-allowed' : 'pointer',
                 marginTop: '2rem',
+                opacity: isProcessingPayment ? 0.7 : 1,
               }}
             >
-              Pay now
+              {isProcessingPayment ? 'Processing...' : 'Pay now'}
             </motion.button>
 
             {/* Copyright Notice */}

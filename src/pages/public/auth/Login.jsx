@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import logoImage from '../../../assets/images/logo.jpg';
 import OtpVerificationModal from '../../../components/OtpVerificationModal';
+import GoogleSignupButton from '../../../components/GoogleSignupButton';
+import GoogleLoginButton from '../../../components/GoogleLoginButton';
 import { showAlert } from '../../../services/notificationService';
 
 // Accept optional props so this can be used as a modal overlay
@@ -42,6 +44,7 @@ const Login = ({ onClose, returnTo }) => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [googleSignupLoading, setGoogleSignupLoading] = useState(false);
+  const [googleLoginLoading, setGoogleLoginLoading] = useState(false);
   const [signupError, setSignupError] = useState('');
   const [signupSuccess, setSignupSuccess] = useState(false);
   const googleButtonRef = useRef(null);
@@ -269,6 +272,156 @@ const Login = ({ onClose, returnTo }) => {
       cancelled = true;
     };
   }, [isSignup, showOtpModal]);
+
+  // Handle Google signup success (Firebase)
+  const handleGoogleSignupSuccess = (data) => {
+    console.log('✅ Google signup success in Login component:', data);
+    console.log('✅ Firebase user email_verified_at:', data?.customer?.email_verified_at);
+    
+    // Firebase users are ALREADY verified by Google - NEVER show OTP modal
+    setSignupSuccess(true);
+    setGoogleSignupLoading(false);
+    setShowOtpModal(false); // Explicitly ensure OTP is NOT shown
+    
+    showAlert
+      .success('Registration complete', 'Your Google account is linked. Please sign in to continue.', {
+        width: 360,
+        padding: '0.9rem 1rem',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#ffc107',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      })
+      .then(() => {
+        setShowOtpModal(false); // Double-check OTP is closed
+        setIsSignup(false);
+      });
+  };
+
+  // Handle Google signup error (Firebase)
+  const handleGoogleSignupError = (error) => {
+    console.error('❌ Google signup error in Login component:', error);
+    setGoogleSignupLoading(false);
+    const message = error.message || 'Google registration failed. Please try again.';
+    setSignupError(message);
+    
+    if (error.code === 'EMAIL_ALREADY_REGISTERED') {
+      showAlert
+        .confirm('Email already registered', message, 'Go to login', 'Cancel', {
+          confirmButtonColor: '#ffc107',
+          cancelButtonColor: '#6c757d',
+          width: 340,
+          padding: '0.9rem 1rem',
+          allowOutsideClick: true,
+          allowEscapeKey: true,
+        })
+        .then((result) => {
+          if (result.isConfirmed) {
+            setShowOtpModal(false);
+            setIsSignup(false);
+          }
+        });
+    } else {
+      showAlert.error('Registration failed', message, {
+        width: 340,
+        padding: '0.9rem 1rem',
+      });
+    }
+  };
+
+  // Handle Google login success (Firebase)
+  const handleGoogleLoginSuccess = (data) => {
+    console.log('✅ Google login success:', data);
+    setGoogleLoginLoading(false);
+    setLoginLoading(false);
+    
+    // Store token
+    if (data.token) {
+      localStorage.setItem('customer_token', data.token);
+    }
+
+    showAlert.close();
+    
+    // Show success message and redirect to checkout
+    showAlert.success('Login successful', 'Welcome back! Redirecting to checkout...', {
+      width: 340,
+      padding: '0.9rem 1rem',
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#ffc107',
+      timer: 2000,
+      timerProgressBar: true,
+    }).then(() => {
+      // Close modal if it was opened as overlay
+      if (onClose) {
+        onClose();
+      }
+      
+      // Navigate to checkout page
+      navigate('/checkout');
+    });
+  };
+
+  // Handle Google login error (Firebase)
+  const handleGoogleLoginError = (error) => {
+    console.error('❌ Google login error:', error);
+    setGoogleLoginLoading(false);
+    const message = error.message || 'Google login failed. Please try again.';
+    setLoginError(message);
+    
+    // Handle specific error codes
+    if (error.code === 'USER_NOT_FOUND') {
+      showAlert.close();
+      showAlert.confirm(
+        'Account Not Found',
+        error.message || 'No account found with this email address. Would you like to sign up instead?',
+        'Sign Up',
+        'Cancel',
+        {
+          confirmButtonColor: '#ffc107',
+          cancelButtonColor: '#6c757d',
+          width: 360,
+          padding: '0.9rem 1rem',
+          allowOutsideClick: true,
+          allowEscapeKey: true,
+        }
+      ).then((result) => {
+        if (result.isConfirmed) {
+          // Switch to signup form
+          setIsSignup(true);
+        }
+      });
+    } else if (error.code === 'NOT_GOOGLE_ACCOUNT') {
+      showAlert.close();
+      showAlert.info(
+        'Account Type Mismatch',
+        message,
+        {
+          width: 400,
+          padding: '0.9rem 1rem',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#ffc107',
+          allowOutsideClick: true,
+          allowEscapeKey: true,
+        }
+      );
+    } else if (error.code === 'EMAIL_NOT_VERIFIED' || error.code === 'ACCOUNT_INACTIVE') {
+      showAlert.close();
+      showAlert.error('Account Not Verified', message, {
+        width: 340,
+        padding: '0.9rem 1rem',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#ffc107',
+      });
+    } else {
+      showAlert.close();
+      showAlert.error('Login Failed', message, {
+        width: 340,
+        padding: '0.9rem 1rem',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#ffc107',
+      });
+    }
+  };
 
   const requestModalClose = (action) => {
     pendingCloseActionRef.current = action;
@@ -600,7 +753,30 @@ const Login = ({ onClose, returnTo }) => {
             return; // Exit early
           }
           
-          // CASE 2: EMAIL_NOT_VERIFIED or ACCOUNT_INACTIVE
+          // CASE 2: USE_GOOGLE_LOGIN
+          // User signed up with Google, so they must use Google sign-in
+          if (data?.code === 'USE_GOOGLE_LOGIN') {
+            errorTitle = 'Google Account Detected';
+            errorMessage = data?.message || 'This account was created with Google. Please use "Sign in with Google" to access your account.';
+            setLoginError(errorMessage);
+            showAlert.close();
+            showAlert.info(
+              errorTitle,
+              errorMessage,
+              {
+                width: 400,
+                padding: '0.9rem 1rem',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#ffc107',
+                allowOutsideClick: true,
+                allowEscapeKey: true,
+              }
+            );
+            setLoginLoading(false);
+            return; // Exit early
+          }
+          
+          // CASE 3: EMAIL_NOT_VERIFIED or ACCOUNT_INACTIVE
           // Email exists, but email not verified OR is_active=0 OR register_status not 'verified'
           if (data?.code === 'EMAIL_NOT_VERIFIED' || data?.code === 'ACCOUNT_INACTIVE') {
             errorTitle = 'Account Not Verified';
@@ -666,7 +842,7 @@ const Login = ({ onClose, returnTo }) => {
             return; // Exit early
           }
           
-          // CASE 3: INVALID_PASSWORD
+          // CASE 4: INVALID_PASSWORD
           // Email exists, is_active=1, register_status=verified, but password is incorrect
           if (data?.code === 'INVALID_PASSWORD') {
             errorTitle = 'Incorrect password';
@@ -1298,42 +1474,14 @@ const Login = ({ onClose, returnTo }) => {
                   />
                 </div>
 
-                {/* Social login buttons */}
+                {/* Social login buttons - USING FIREBASE */}
                 <div className="d-flex justify-content-center gap-3 mb-1">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary d-flex align-items-center"
-                    style={{
-                      fontSize: '0.9rem',
-                      padding: '0.35rem 0.75rem',
-                      borderColor: '#4285F4',
-                      color: '#4285F4',
-                      backgroundColor: 'transparent',
-                      transition: 'all 0.3s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#4285F4';
-                      e.currentTarget.style.color = '#FFFFFF';
-                      e.currentTarget.style.borderColor = '#4285F4';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(66, 133, 244, 0.3)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = '#4285F4';
-                      e.currentTarget.style.borderColor = '#4285F4';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <img
-                      src="https://www.google.com/favicon.ico"
-                      alt="Google"
-                      className="me-2"
-                      style={{ width: 18, height: 18 }}
-                    />
-                    Google
-                  </button>
+                  <GoogleLoginButton
+                    onSuccess={handleGoogleLoginSuccess}
+                    onError={handleGoogleLoginError}
+                    disabled={loginLoading || googleLoginLoading}
+                    loading={googleLoginLoading}
+                  />
                 </div>
                   </motion.div>
                 ) : (
@@ -1614,17 +1762,14 @@ const Login = ({ onClose, returnTo }) => {
                         />
                       </div>
 
-                      {/* Social signup buttons */}
+                      {/* Social signup buttons - USING FIREBASE */}
                       <div className="d-flex justify-content-center gap-3 mb-1">
-                        <div
-                          style={{
-                            pointerEvents: googleSignupLoading ? 'none' : 'auto',
-                            opacity: googleSignupLoading ? 0.6 : 1,
-                            transition: 'opacity 0.2s ease',
-                          }}
-                        >
-                          <div ref={googleButtonRef} />
-                        </div>
+                        <GoogleSignupButton
+                          onSuccess={handleGoogleSignupSuccess}
+                          onError={handleGoogleSignupError}
+                          disabled={googleSignupLoading || showOtpModal}
+                          loading={googleSignupLoading}
+                        />
                       </div>
                       </motion.div>
                     ) : (

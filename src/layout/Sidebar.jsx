@@ -8,16 +8,26 @@ const Sidebar = ({ onCloseSidebar }) => {
   const location = useLocation();
   // Initialize expanded state based on current route
   const isOnProductsRoute = location.pathname.startsWith('/admin/products');
+  const isOnCustomersRoute = location.pathname.startsWith('/admin/customers');
+  const isOnLandingPageSectionsRoute = location.pathname === '/admin/landing-page-sections';
   const [expandedItems, setExpandedItems] = useState({
-    products: isOnProductsRoute,
+    products: isOnProductsRoute && !isOnLandingPageSectionsRoute,
+    customers: isOnCustomersRoute && !isOnLandingPageSectionsRoute,
   });
 
-  // Auto-expand parent if child route is active
+  // Auto-expand/collapse parent based on current route
   useEffect(() => {
-    if (isOnProductsRoute && !expandedItems.products) {
-      setExpandedItems(prev => ({ ...prev, products: true }));
+    if (isOnLandingPageSectionsRoute) {
+      // Collapse Products and Customers menus when on Landing Page Sections
+      setExpandedItems(prev => ({ ...prev, products: false, customers: false }));
+    } else if (isOnProductsRoute) {
+      // Expand Products menu when on Products routes
+      setExpandedItems(prev => ({ ...prev, products: true, customers: false }));
+    } else if (isOnCustomersRoute) {
+      // Expand Customers menu when on Customers routes
+      setExpandedItems(prev => ({ ...prev, products: false, customers: true }));
     }
-  }, [location.pathname, isOnProductsRoute]);
+  }, [location.pathname, isOnProductsRoute, isOnCustomersRoute, isOnLandingPageSectionsRoute]);
   
   // Check if user is admin - STATIC CHECK (no DB lookup needed)
   // If we're authenticated and on admin routes, assume admin until proven otherwise
@@ -52,8 +62,12 @@ const Sidebar = ({ onCloseSidebar }) => {
     }
   };
 
-  const handleLinkClick = () => {
+  const handleLinkClick = (href) => {
     closeSidebarOnMobile();
+    // Collapse Products menu when clicking Landing Page Sections
+    if (href === '/admin/landing-page-sections') {
+      setExpandedItems(prev => ({ ...prev, products: false, customers: false }));
+    }
   };
 
   // Toggle expanded state for nested items
@@ -100,10 +114,33 @@ const Sidebar = ({ onCloseSidebar }) => {
               label: "Collections",
               href: "/admin/products/collections",
             },
+          ],
+        },
+        {
+          icon: "fas fa-columns",
+          label: "Landing Page Sections",
+          href: "/admin/landing-page-sections",
+        },
+      ],
+    },
+    {
+      heading: "Customer Management",
+      items: [
+        {
+          icon: "fas fa-users",
+          label: "Customers",
+          href: "/admin/customers",
+          hasChildren: true,
+          children: [
             {
-              icon: "fas fa-columns",
-              label: "Landing Page Sections",
-              href: "/admin/landing-page-sections",
+              icon: "fas fa-list",
+              label: "All Customers",
+              href: "/admin/customers",
+            },
+            {
+              icon: "fas fa-clock",
+              label: "Time Logging",
+              href: "/admin/customers/time-logs",
             },
           ],
         },
@@ -161,7 +198,7 @@ const Sidebar = ({ onCloseSidebar }) => {
                         key={childIndex}
                         className={`nav-link ${isChildActive ? "active" : ""}`}
                         to={child.href}
-                        onClick={handleLinkClick}
+                        onClick={() => handleLinkClick(child.href)}
                       >
                         <div className="sb-nav-link-icon">
                           <i className={child.icon}></i>
@@ -185,7 +222,7 @@ const Sidebar = ({ onCloseSidebar }) => {
             key={itemIndex}
             className={`nav-link ${isActive ? "active" : ""}`}
             to={item.href}
-            onClick={handleLinkClick}
+            onClick={() => handleLinkClick(item.href)}
           >
             <div className="sb-nav-link-icon">
               <i className={item.icon}></i>

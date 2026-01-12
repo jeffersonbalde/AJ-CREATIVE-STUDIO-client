@@ -3,14 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import logoImage from '../../../assets/images/logo.jpg';
 import OtpVerificationModal from '../../../components/OtpVerificationModal';
+import GoogleSignupButton from '../../../components/GoogleSignupButton';
 import { showAlert } from '../../../services/notificationService';
 
 // Accept optional props so this can be used as a modal overlay
 // onClose: close handler when used as modal
 // returnTo: path to navigate after successful signup
 const Signup = ({ onClose, returnTo }) => {
-  console.log('🚀 SIGNUP COMPONENT RENDERING');
-  
   const navigate = useNavigate();
   const location = useLocation();
   const [isModalVisible, setIsModalVisible] = useState(true);
@@ -20,7 +19,6 @@ const Signup = ({ onClose, returnTo }) => {
   const [step, setStep] = useState('form'); // 'form' | 'otp' | 'success'
   const [signupLoading, setSignupLoading] = useState(false);
   const [googleSignupLoading, setGoogleSignupLoading] = useState(false);
-  const [googleUiState, setGoogleUiState] = useState('loading'); // 'loading' | 'ready' | 'unavailable'
   const [signupError, setSignupError] = useState('');
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [name, setName] = useState('');
@@ -32,19 +30,95 @@ const Signup = ({ onClose, returnTo }) => {
     hasNumber: false,
   });
   const nameInputRef = useRef(null);
-  const googleButtonRef = useRef(null);
-  const googleButtonRenderedRef = useRef(false);
   const contentControls = useAnimationControls();
 
-  // Debug environment variables on mount
+  // Debug: Add URL parameter when component mounts to verify it's rendering
   useEffect(() => {
-    console.log('=== SIGNUP COMPONENT MOUNTED ===');
-    console.log('VITE_GOOGLE_CLIENT_ID:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
-    console.log('VITE_LARAVEL_API:', import.meta.env.VITE_LARAVEL_API);
-    console.log('Step:', step);
-    console.log('Google UI State:', googleUiState);
-    alert('Signup component mounted! Check console.');
+    console.log('🔴 SIGNUP COMPONENT MOUNTED - Adding URL parameter');
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('signup_mounted', Date.now().toString());
+    window.history.replaceState({}, '', currentUrl.toString());
+    console.log('🔴 SIGNUP COMPONENT - URL updated:', window.location.href);
+    console.log('🔴 SIGNUP COMPONENT - Current step:', step);
+    console.log('🔴 SIGNUP COMPONENT - googleSignupLoading:', googleSignupLoading);
+    console.log('🔴 SIGNUP COMPONENT - Will render Google button?', step === 'form');
+    
+    // Also add a visible indicator in the page title
+    const originalTitle = document.title;
+    document.title = `[SIGNUP MOUNTED] ${originalTitle}`;
+    
+    return () => {
+      document.title = originalTitle;
+    };
   }, []);
+
+  // Debug: Log step changes and update URL
+  useEffect(() => {
+    console.log('🔴 SIGNUP COMPONENT - Step changed to:', step);
+    console.log('🔴 SIGNUP COMPONENT - googleSignupLoading:', googleSignupLoading);
+    
+    // Update URL when step changes
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('signup_step', step);
+    window.history.replaceState({}, '', currentUrl.toString());
+  }, [step, googleSignupLoading]);
+
+  // Handle Google signup success
+  const handleGoogleSignupSuccess = (data) => {
+    console.log('✅ Google signup success:', data);
+    setVerifySuccess(true);
+    setStep('success');
+    setGoogleSignupLoading(false);
+    
+    showAlert
+      .success('Registration complete', 'Your Google account is linked. Please sign in to continue.', {
+        width: 360,
+        padding: '0.9rem 1rem',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#ffc107',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      })
+      .then(() => {
+        goToLoginModal();
+      });
+  };
+
+  // Handle Google signup error
+  const handleGoogleSignupError = (error) => {
+    console.error('❌ Google signup error:', error);
+    setGoogleSignupLoading(false);
+    const message = error.message || 'Google registration failed. Please try again.';
+    setSignupError(message);
+    
+    if (error.code === 'EMAIL_ALREADY_REGISTERED') {
+      showAlert
+        .confirm(
+          'Email already registered',
+          message,
+          'Go to login',
+          'Cancel',
+          {
+            confirmButtonColor: '#ffc107',
+            cancelButtonColor: '#6c757d',
+            width: 340,
+            padding: '0.9rem 1rem',
+            allowOutsideClick: true,
+            allowEscapeKey: true,
+          }
+        )
+        .then((result) => {
+          if (result.isConfirmed) {
+            goToLoginModal();
+          }
+        });
+    } else {
+      showAlert.error('Registration failed', message, {
+        width: 340,
+        padding: '0.9rem 1rem',
+      });
+    }
+  };
 
   // Lock background scroll while modal is open
   useEffect(() => {
@@ -77,364 +151,7 @@ const Signup = ({ onClose, returnTo }) => {
     });
   }, [contentControls]);
 
-  // Google Identity Services: render Google sign-up button (only on the form step)
-  useEffect(() => {
-    if (step !== 'form') {
-      googleButtonRenderedRef.current = false;
-      setGoogleUiState('loading');
-      return;
-    }
-
-    console.log('=== GOOGLE SIGNUP INITIALIZATION ===');
-    console.log('Step:', step);
-    console.log('Google Client ID from env:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
-    console.log('Google already loaded?', !!window.google?.accounts?.id);
-
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (!googleClientId || googleClientId === 'undefined' || googleClientId.trim() === '') {
-      console.error('Google Client ID is missing or undefined');
-      setGoogleUiState('unavailable');
-      return;
-    }
-
-    let cancelled = false;
-
-    setGoogleUiState('loading');
-
-    const loadGoogleScript = () =>
-      new Promise((resolve, reject) => {
-        if (window.google?.accounts?.id) {
-          console.log('Google script already loaded');
-          resolve();
-          return;
-        }
-
-        const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-        if (existing) {
-          console.log('Google script already in DOM');
-          existing.addEventListener('load', resolve, { once: true });
-          existing.addEventListener('error', reject, { once: true });
-          return;
-        }
-
-        console.log('Loading Google script...');
-        const script = document.createElement('script');
-        script.src = 'https://accounts.google.com/gsi/client';
-        script.async = true;
-        script.defer = true;
-        script.onload = () => {
-          console.log('Google script loaded successfully');
-          resolve();
-        };
-        script.onerror = () => {
-          console.error('Failed to load Google Identity Services script');
-          reject(new Error('Failed to load Google Identity Services script'));
-        };
-        document.head.appendChild(script);
-      });
-
-    const init = async () => {
-      try {
-        console.log('Initializing Google...');
-        await loadGoogleScript();
-        if (cancelled) return;
-
-        const googleId = window.google?.accounts?.id;
-        console.log('Google accounts.id available:', !!googleId);
-        if (!googleId) {
-          console.error('Google Identity Services not available');
-          setGoogleUiState('unavailable');
-          return;
-        }
-        if (!googleButtonRef.current) {
-          console.error('Google button ref not available');
-          setGoogleUiState('unavailable');
-          return;
-        }
-
-        // Avoid double rendering when React re-renders this step
-        if (googleButtonRenderedRef.current) {
-          console.log('Google button already rendered');
-          return;
-        }
-        googleButtonRenderedRef.current = true;
-
-        googleId.initialize({
-          client_id: googleClientId,
-          callback: async (credentialResponse) => {
-            console.log('Google callback received:', credentialResponse);
-            const idToken = credentialResponse?.credential;
-            if (!idToken) {
-              setSignupError('Google sign-up failed. Please try again.');
-              return;
-            }
-
-            setGoogleSignupLoading(true);
-            setSignupError('');
-
-            showAlert.processing('', '', {
-              width: 320,
-              padding: '0.75rem 0.9rem',
-              html: `
-                <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                  <div style="font-size:14px;font-weight:800;color:#111;line-height:1.2;">Signing up with Google...</div>
-                  <div style="font-size:12px;color:#666;line-height:1.2;">Please wait</div>
-                </div>
-              `,
-            });
-
-            let postProcessingAction = null;
-            try {
-              const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
-              console.log('API Base URL:', apiBaseUrl);
-
-              const response = await fetch(`${apiBaseUrl}/auth/google/signup`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Accept: 'application/json',
-                },
-                body: JSON.stringify({ id_token: idToken }),
-              });
-
-              const data = await response.json().catch(() => ({}));
-              console.log('Google signup response:', data);
-
-              if (response.ok && data.success) {
-                // Google emails are verified, so we can treat this as a completed registration.
-                setVerifySuccess(true);
-                setStep('success');
-
-                postProcessingAction = () =>
-                  showAlert
-                    .success('Registration complete', 'Your Google account is linked. Please sign in to continue.', {
-                      width: 360,
-                      padding: '0.9rem 1rem',
-                      confirmButtonText: 'OK',
-                      confirmButtonColor: '#ffc107',
-                      allowOutsideClick: false,
-                      allowEscapeKey: false,
-                    })
-                    .then(() => {
-                      goToLoginModal();
-                    });
-              } else {
-                const message = data?.message || 'Google registration failed. Please try again.';
-                setSignupError(message);
-
-                if (data?.code === 'EMAIL_ALREADY_REGISTERED') {
-                  postProcessingAction = () =>
-                    showAlert
-                      .confirm(
-                        'Email already registered',
-                        message,
-                        'Go to login',
-                        'Cancel',
-                        {
-                          confirmButtonColor: '#ffc107',
-                          cancelButtonColor: '#6c757d',
-                          width: 340,
-                          padding: '0.9rem 1rem',
-                          allowOutsideClick: true,
-                          allowEscapeKey: true,
-                        }
-                      )
-                      .then((result) => {
-                        if (result.isConfirmed) {
-                          goToLoginModal();
-                        }
-                      });
-                }
-
-                if (data?.errors) {
-                  const errorMessages = Object.values(data.errors).flat();
-                  setSignupError(errorMessages.join(', '));
-                }
-              }
-            } catch (err) {
-              console.error('Google signup error:', err);
-              setSignupError('Network error. Please check your connection and try again.');
-            } finally {
-              showAlert.close();
-              setGoogleSignupLoading(false);
-              if (postProcessingAction) {
-                setTimeout(postProcessingAction, 0);
-              }
-            }
-          },
-        });
-
-        // Clear any previous button content and render the official Google button
-        googleButtonRef.current.innerHTML = '';
-        console.log('Rendering Google button...');
-        googleId.renderButton(googleButtonRef.current, {
-          theme: 'outline',
-          size: 'large',
-          text: 'signup_with',
-          shape: 'pill',
-          width: 260,
-        });
-
-        // Verify the button actually rendered (check after a brief delay)
-        setTimeout(() => {
-          if (cancelled) return;
-          const hasButton = googleButtonRef.current && googleButtonRef.current.children.length > 0;
-          console.log('Google button container children:', googleButtonRef.current?.children?.length);
-          console.log('Has Google button?', hasButton);
-          
-          if (!hasButton) {
-            // Google button didn't render, show fallback
-            console.log('Google button did not render, showing fallback');
-            setGoogleUiState('unavailable');
-            googleButtonRenderedRef.current = false;
-          } else {
-            console.log('Google button rendered successfully');
-            setGoogleUiState('ready');
-          }
-        }, 500);
-      } catch (e) {
-        console.error('Google initialization error:', e);
-        setGoogleUiState('unavailable');
-      }
-    };
-
-    init();
-
-    return () => {
-      cancelled = true;
-      console.log('Google cleanup');
-    };
-  }, [step]);
-
-  const handleGoogleFallbackClick = async () => {
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (!googleClientId) {
-      showAlert.error(
-        'Google not configured',
-        'Missing VITE_GOOGLE_CLIENT_ID. Add it to client/.env and restart Vite (npm run dev).',
-        { width: 380, padding: '0.9rem 1rem' }
-      );
-      return;
-    }
-
-    // Try to trigger Google sign-in programmatically
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt();
-      } catch (e) {
-        // If prompt fails, try to render button and click it
-        if (googleButtonRef.current) {
-          googleButtonRef.current.innerHTML = '';
-          window.google.accounts.id.renderButton(googleButtonRef.current, {
-            theme: 'outline',
-            size: 'large',
-            text: 'signup_with',
-            shape: 'pill',
-            width: 260,
-            callback: async (credentialResponse) => {
-              const idToken = credentialResponse?.credential;
-              if (!idToken) {
-                setSignupError('Google sign-up failed. Please try again.');
-                return;
-              }
-
-              setGoogleSignupLoading(true);
-              setSignupError('');
-
-              showAlert.processing('', '', {
-                width: 320,
-                padding: '0.75rem 0.9rem',
-                html: `
-                  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                    <div style="font-size:14px;font-weight:800;color:#111;line-height:1.2;">Signing up with Google...</div>
-                    <div style="font-size:12px;color:#666;line-height:1.2;">Please wait</div>
-                  </div>
-                `,
-              });
-
-              try {
-                const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-                const response = await fetch(`${apiBaseUrl}/auth/google/signup`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                  },
-                  body: JSON.stringify({ id_token: idToken }),
-                });
-
-                const data = await response.json().catch(() => ({}));
-
-                if (response.ok && data.success) {
-                  setVerifySuccess(true);
-                  setStep('success');
-
-                  showAlert
-                    .success('Registration complete', 'Your Google account is linked. Please sign in to continue.', {
-                      width: 360,
-                      padding: '0.9rem 1rem',
-                      confirmButtonText: 'OK',
-                      confirmButtonColor: '#ffc107',
-                      allowOutsideClick: false,
-                      allowEscapeKey: false,
-                    })
-                    .then(() => {
-                      goToLoginModal();
-                    });
-                } else {
-                  const message = data?.message || 'Google registration failed. Please try again.';
-                  setSignupError(message);
-
-                  if (data?.code === 'EMAIL_ALREADY_REGISTERED') {
-                    showAlert
-                      .confirm(
-                        'Email already registered',
-                        message,
-                        'Go to login',
-                        'Cancel',
-                        {
-                          confirmButtonColor: '#ffc107',
-                          cancelButtonColor: '#6c757d',
-                          width: 340,
-                          padding: '0.9rem 1rem',
-                          allowOutsideClick: true,
-                          allowEscapeKey: true,
-                        }
-                      )
-                      .then((result) => {
-                        if (result.isConfirmed) {
-                          goToLoginModal();
-                        }
-                      });
-                  }
-                }
-              } catch (err) {
-                setSignupError('Network error. Please check your connection and try again.');
-              } finally {
-                showAlert.close();
-                setGoogleSignupLoading(false);
-              }
-            },
-          });
-          // Try to click the button after a short delay
-          setTimeout(() => {
-            const button = googleButtonRef.current?.querySelector('div[role="button"]');
-            if (button) {
-              button.click();
-            }
-          }, 100);
-        }
-      }
-    } else {
-      showAlert.info('Loading Google…', 'Please wait while Google sign-in loads. If this persists, refresh the page.', {
-        width: 380,
-        padding: '0.9rem 1rem',
-      });
-    }
-  };
+  // Removed old Google Identity Services code - now using @react-oauth/google
 
   const requestModalClose = (action) => {
     pendingCloseActionRef.current = action;
@@ -825,6 +542,13 @@ const Signup = ({ onClose, returnTo }) => {
                           exit={{ opacity: 0, y: -100 }}
                           transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                           style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+                          onAnimationStart={() => {
+                            console.log('🔴 SIGNUP FORM STEP - Animation started, form is rendering!');
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('signup_form_rendered', Date.now().toString());
+                            window.history.replaceState({}, '', currentUrl.toString());
+                            console.log('🔴 SIGNUP FORM STEP - URL updated:', window.location.href);
+                          }}
                         >
                     {/* Welcome text */}
                     <div
@@ -930,6 +654,7 @@ const Signup = ({ onClose, returnTo }) => {
                         scrollBehavior: 'smooth',
                         WebkitOverflowScrolling: 'touch',
                         overscrollBehavior: 'contain',
+                        maxHeight: 'none',
                       }}
                     >
                       <form onSubmit={handleSubmit}>
@@ -1147,54 +872,6 @@ const Signup = ({ onClose, returnTo }) => {
                           {signupLoading ? 'Signing up…' : 'SIGN UP'}
                         </button>
 
-                        {/* TEST: Yellow box INSIDE form */}
-                        <div style={{ 
-                          backgroundColor: 'yellow', 
-                          padding: '15px', 
-                          margin: '15px 0',
-                          border: '5px solid orange',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          fontSize: '16px',
-                          zIndex: 9999,
-                          position: 'relative',
-                        }}>
-                          🟡 TEST BOX: If you see this, the form section renders!
-                        </div>
-
-                        {/* Google Button INSIDE form - ALWAYS VISIBLE */}
-                        <div style={{ 
-                          backgroundColor: 'rgba(255, 0, 0, 0.3)', 
-                          padding: '15px',
-                          margin: '15px 0',
-                          border: '5px solid red',
-                          textAlign: 'center',
-                        }}>
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary d-flex align-items-center mx-auto"
-                            onClick={() => {
-                              console.log('🔵 BUTTON CLICKED!');
-                              alert('Google button clicked!');
-                              handleGoogleFallbackClick();
-                            }}
-                            disabled={googleSignupLoading}
-                            style={{
-                              fontSize: '1rem',
-                              padding: '0.75rem 1.5rem',
-                              borderColor: '#4285F4',
-                              color: '#4285F4',
-                              backgroundColor: '#ffffff',
-                              border: '4px solid blue',
-                              minWidth: '250px',
-                              fontWeight: 'bold',
-                              boxShadow: '0 0 15px rgba(0,0,0,0.5)',
-                            }}
-                          >
-                            <img src="https://www.google.com/favicon.ico" alt="Google" className="me-2" style={{ width: 20, height: 20 }} />
-                            <span>GOOGLE BUTTON (State: {googleUiState})</span>
-                          </button>
-                        </div>
                       </form>
 
                       {/* Login link */}
@@ -1218,80 +895,70 @@ const Signup = ({ onClose, returnTo }) => {
                         </button>
                       </div>
 
-                      {/* Divider */}
+                      {/* Divider - EXACT COPY FROM LOGIN.JSX */}
                       <div className="d-flex align-items-center my-3" style={{ fontSize: '0.8rem', color: '#999' }}>
-                        <div style={{ height: 1, backgroundColor: '#e0e0e0', flex: 1 }} />
-                        <span className="px-2">Or, sign up with</span>
-                        <div style={{ height: 1, backgroundColor: '#e0e0e0', flex: 1 }} />
-                      </div>
-
-                      {/* Social signup buttons - ALSO OUTSIDE FORM */}
-                      <div 
-                        className="d-flex justify-content-center gap-3 mb-1" 
-                        style={{ 
-                          minHeight: '60px', 
-                          padding: '15px 0',
-                          position: 'relative',
-                          width: '100%',
-                          backgroundColor: 'rgba(255, 0, 0, 0.2)', // DEBUG: Red background
-                          border: '2px solid red', // DEBUG: Red border
-                        }}
-                      >
-                        {/* ALWAYS VISIBLE BUTTON - NO CONDITIONS */}
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary d-flex align-items-center"
-                          onClick={() => {
-                            console.log('🔵 BUTTON CLICKED!');
-                            alert('Google button clicked! State: ' + googleUiState);
-                            handleGoogleFallbackClick();
-                          }}
-                          disabled={googleSignupLoading}
-                          style={{
-                            fontSize: '0.9rem',
-                            padding: '0.5rem 1rem',
-                            borderColor: '#4285F4',
-                            color: '#4285F4',
-                            backgroundColor: '#ffffff',
-                            transition: 'all 0.3s ease',
-                            visibility: 'visible',
-                            display: 'flex',
-                            opacity: 1,
-                            position: 'relative',
-                            zIndex: 100,
-                            border: '3px solid blue', // DEBUG: Blue border
-                            minWidth: '200px',
-                            boxShadow: '0 0 10px rgba(0,0,0,0.3)',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!googleSignupLoading) {
-                              e.currentTarget.style.backgroundColor = '#4285F4';
-                              e.currentTarget.style.color = '#FFFFFF';
-                              e.currentTarget.style.borderColor = '#4285F4';
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(66, 133, 244, 0.3)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#ffffff';
-                            e.currentTarget.style.color = '#4285F4';
-                            e.currentTarget.style.borderColor = '#4285F4';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
-                          }}
-                        >
-                          <img src="https://www.google.com/favicon.ico" alt="Google" className="me-2" style={{ width: 18, height: 18, display: 'block' }} />
-                          <span style={{ fontWeight: 'bold' }}>Google (State: {googleUiState})</span>
-                        </button>
-                        
-                        {/* Google button container - hidden for now */}
                         <div
-                          ref={googleButtonRef}
                           style={{
-                            display: 'none',
-                            visibility: 'hidden',
+                            height: 1,
+                            backgroundColor: '#e0e0e0',
+                            flex: 1,
                           }}
                         />
+                        <span className="px-2">Or, sign up with</span>
+                        <div
+                          style={{
+                            height: 1,
+                            backgroundColor: '#e0e0e0',
+                            flex: 1,
+                          }}
+                        />
+                      </div>
+
+                      {/* TEST: Always visible test button */}
+                      <div style={{ 
+                        padding: '20px', 
+                        backgroundColor: 'yellow', 
+                        border: '3px solid red', 
+                        margin: '10px 0',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: 'red', fontWeight: 'bold', fontSize: '16px' }}>
+                          TEST: If you see this yellow box, the section is rendering!
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => alert('TEST BUTTON CLICKED!')}
+                          style={{
+                            marginTop: '10px',
+                            padding: '10px 20px',
+                            backgroundColor: 'red',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          TEST BUTTON - CLICK ME
+                        </button>
+                      </div>
+
+                      {/* Social signup buttons - USING SEPARATE COMPONENT */}
+                      <div className="d-flex justify-content-center gap-3 mb-1" style={{ minHeight: '60px', paddingBottom: '10px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', backgroundColor: 'rgba(255,0,0,0.1)', padding: '10px', border: '2px dashed blue' }}>
+                          <GoogleSignupButton
+                            onSuccess={(data) => {
+                              setGoogleSignupLoading(true);
+                              handleGoogleSignupSuccess(data);
+                            }}
+                            onError={(error) => {
+                              handleGoogleSignupError(error);
+                            }}
+                            disabled={step !== 'form'}
+                            loading={googleSignupLoading}
+                          />
+                        </div>
                       </div>
                     </div>
                         </motion.div>
