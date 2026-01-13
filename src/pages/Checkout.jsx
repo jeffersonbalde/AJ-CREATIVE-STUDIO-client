@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -12,6 +13,7 @@ const formatPHP = (value) =>
 
 const Checkout = () => {
   const { cartItems, getCartTotal } = useCart();
+  const { customer, customerToken, isCustomerAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
@@ -517,29 +519,166 @@ const Checkout = () => {
       return;
     }
 
+    if (cartItems.length === 0) {
+      alert('Your cart is empty');
+      return;
+    }
+
     setIsProcessingPayment(true);
 
     try {
       const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const amount = discountPercent > 0 ? finalTotal : subtotal;
       
-      // Build success, cancel, and failure URLs
+      // Step 1: Create order first
+      // Debug: Log cart items structure
+      console.log('Cart items before processing:', cartItems);
+      
+      // Ensure cart items have valid structure
+      const orderItems = cartItems.map((item, index) => {
+        // Check if item has required fields
+        if (!item || (!item.id && item.product_id === undefined)) {
+          console.error('Invalid cart item at index', index, ':', item);
+          throw new Error(`Cart item at index ${index} is missing product ID`);
+        }
+        
+        // Use product_id if available, otherwise use id
+        const productIdValue = item.product_id || item.id;
+        
+        // Ensure product_id is an integer
+        const productId = parseInt(productIdValue);
+        if (isNaN(productId)) {
+          console.error('Invalid product ID:', productIdValue, 'in item:', item);
+          throw new Error(`Invalid product ID: ${productIdValue}`);
+        }
+        
+        // Ensure quantity is an integer and at least 1
+        const quantity = parseInt(item.quantity || 1);
+        if (isNaN(quantity) || quantity < 1) {
+          console.error('Invalid quantity:', item.quantity, 'in item:', item);
+          throw new Error(`Invalid quantity for product ${productId}: ${item.quantity}`);
+        }
+        
+        return {
+          product_id: productId,
+          quantity: quantity,
+        };
+      });
+      
+      console.log('Processed order items:', orderItems);
+      
+      const orderData = {
+        items: orderItems,
+        subtotal: subtotal,
+        tax_amount: 0,
+        discount_amount: discountPercent > 0 ? (subtotal - finalTotal) : 0,
+        total_amount: amount,
+        currency: 'PHP',
+        billing_address: {
+          name: `${firstName} ${lastName}`.trim(),
+          email: email.trim(),
+          address: address.trim() || null,
+          city: city.trim() || null,
+          region: region.trim() || null,
+          state: state.trim() || null,
+          postal_code: postalCode.trim() || null,
+          country: country || 'PH',
+        },
+        shipping_address: {
+          name: `${firstName} ${lastName}`.trim(),
+          email: email.trim(),
+          address: address.trim() || null,
+          city: city.trim() || null,
+          region: region.trim() || null,
+          state: state.trim() || null,
+          postal_code: postalCode.trim() || null,
+          country: country || 'PH',
+        },
+      };
+
+      // Add guest fields if not authenticated
+      if (!isCustomerAuthenticated) {
+        orderData.guest_email = email.trim();
+        orderData.guest_name = `${firstName} ${lastName}`.trim();
+      }
+
+      // Create order
+      const orderHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+      // Add auth token if customer is authenticated
+      if (isCustomerAuthenticated && customerToken) {
+        orderHeaders['Authorization'] = `Bearer ${customerToken}`;
+      }
+
+      const orderResponse = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/orders`, {
+        method: 'POST',
+        headers: orderHeaders,
+        body: JSON.stringify(orderData),
+      });
+
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json().catch(() => ({}));
+        setIsProcessingPayment(false);
+        console.error('Order creation error:', errorData);
+        console.error('Order data sent:', orderData);
+        console.error('Cart items:', cartItems);
+        
+        // Show detailed validation errors
+        let errorMessage = errorData.message || 'Failed to create order. Please try again.';
+        if (errorData.errors) {
+          const errorDetails = Object.entries(errorData.errors)
+            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+            .join('\n');
+          errorMessage += '\n\nValidation Errors:\n' + errorDetails;
+          console.error('Validation errors:', errorData.errors);
+        }
+        
+        alert(errorMessage);
+        return;
+      }
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResult.success || !orderResult.order) {
+        setIsProcessingPayment(false);
+        alert('Failed to create order. Please try again.');
+        return;
+      }
+
+      const order = orderResult.order;
+      console.log('Order created:', order);
+
+      // Store order info in localStorage for post-payment processing
+      localStorage.setItem('pending_order', JSON.stringify({
+        order_id: order.id,
+        order_number: order.order_number,
+        email: email.trim(),
+      }));
+
+      // Step 2: Create PayMaya checkout session with order
       const baseUrl = window.location.origin;
-      const successUrl = `${baseUrl}/checkout/success`;
+      const successUrl = `${baseUrl}/order/${order.order_number}`;
       const cancelUrl = `${baseUrl}/checkout/cancel`;
       const failureUrl = `${baseUrl}/checkout/failure`;
 
       // Create order description from cart items
       const orderDescription = cartItems.length === 1 
-        ? cartItems[0].name 
+        ? cartItems[0].title || cartItems[0].name 
         : `${cartItems.length} items`;
 
-      // Create PayMaya checkout session
-      // Ensure we use the correct API endpoint
       const checkoutUrl = `${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/payments/paymaya/checkout`;
       console.log('Calling PayMaya checkout API:', checkoutUrl);
       
-      const response = await fetch(checkoutUrl, {
+      // Split name into first and last name for PayMaya
+      const customerFullName = `${firstName} ${lastName}`.trim();
+      const nameParts = customerFullName.split(' ');
+      const customerFirstName = nameParts[0] || firstName || 'Customer';
+      const customerLastName = nameParts.slice(1).join(' ') || lastName || '';
+      
+      const checkoutResponse = await fetch(checkoutUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -547,13 +686,16 @@ const Checkout = () => {
         },
         body: JSON.stringify({
           amount: amount,
-          order_id: `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          order_id: order.id, // Pass order database ID
+          order_number: order.order_number, // Also pass order number
           description: orderDescription,
           success_url: successUrl,
           cancel_url: cancelUrl,
           failure_url: failureUrl,
           customer: {
-            name: `${firstName} ${lastName}`.trim(),
+            name: customerFullName, // Full name for reference
+            first_name: customerFirstName, // First name for PayMaya
+            last_name: customerLastName, // Last name for PayMaya
             email: email.trim(),
             phone: '', // Add phone field if needed
           },
@@ -561,35 +703,35 @@ const Checkout = () => {
       });
 
       // Check if response is ok before parsing JSON
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+      if (!checkoutResponse.ok) {
+        const errorData = await checkoutResponse.json().catch(() => ({}));
         setIsProcessingPayment(false);
         console.error('PayMaya API error:', {
-          status: response.status,
-          statusText: response.statusText,
+          status: checkoutResponse.status,
+          statusText: checkoutResponse.statusText,
           data: errorData,
         });
-        alert(errorData.message || errorData.error || `Payment failed (${response.status}). Please try again.`);
+        alert(errorData.message || errorData.error || `Payment failed (${checkoutResponse.status}). Please try again.`);
         return;
       }
 
-      const data = await response.json();
-      console.log('PayMaya checkout response:', data);
+      const checkoutData = await checkoutResponse.json();
+      console.log('PayMaya checkout response:', checkoutData);
 
-      if (data.success && data.checkout?.redirect_url) {
+      if (checkoutData.success && checkoutData.checkout?.redirect_url) {
         // Redirect to PayMaya checkout page
-        console.log('Redirecting to PayMaya:', data.checkout.redirect_url);
+        console.log('Redirecting to PayMaya:', checkoutData.checkout.redirect_url);
         // Small delay to ensure state is updated before redirect
         setTimeout(() => {
-          window.location.href = data.checkout.redirect_url;
+          window.location.href = checkoutData.checkout.redirect_url;
         }, 100);
       } else {
         setIsProcessingPayment(false);
-        console.error('PayMaya checkout failed:', data);
-        alert(data.message || 'Failed to create payment session. Please try again.');
+        console.error('PayMaya checkout failed:', checkoutData);
+        alert(checkoutData.message || 'Failed to create payment session. Please try again.');
       }
     } catch (error) {
-      console.error('PayMaya checkout error:', error);
+      console.error('Checkout error:', error);
       setIsProcessingPayment(false);
       alert('Network error. Please check your connection and try again.');
     }

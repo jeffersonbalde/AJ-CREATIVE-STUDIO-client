@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import confetti from 'canvas-confetti';
 import PublicLogin from '../pages/public/auth/Login';
+import { showAlert } from '../services/notificationService';
+import Swal from 'sweetalert2';
 
 const formatPHP = (value) =>
   new Intl.NumberFormat('en-PH', {
@@ -16,9 +18,10 @@ const formatPHP = (value) =>
 
 const CartPanel = () => {
   const navigate = useNavigate();
-  const { cartOpen, setCartOpen, cartItems, updateQuantity, removeFromCart, getCartTotal, getCartItemCount } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { cartOpen, setCartOpen, cartItems, updateQuantity, removeFromCart, getCartTotal, getCartItemCount, clearCart } = useCart();
+  const { customer, customerToken, isCustomerAuthenticated } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
   const hasFiredConfettiRef = useRef(false);
   const cartPanelRef = useRef(null);
@@ -198,6 +201,212 @@ const CartPanel = () => {
       hasFiredConfettiRef.current = false;
     }
   }, [cartOpen, isMaxDiscount]);
+
+  // Handle checkout - requires customer to be logged in
+  const handleCheckout = async () => {
+    // Check if cart is empty
+    if (cartItems.length === 0) {
+      toast.error('Your cart is empty');
+      return;
+    }
+
+    // Get token from localStorage (more reliable than context state)
+    const token = localStorage.getItem('customer_token');
+    
+    // Check if customer is authenticated
+    if (!token) {
+      // Show login modal
+      setCartOpen(false);
+      setShowLoginModal(true);
+      return;
+    }
+
+    // Customer is authenticated - proceed with checkout
+    // Also get customer data from context if available
+    setIsProcessingCheckout(true);
+    setCartOpen(false);
+
+    // Show loading SweetAlert
+    let loadingAlert = null;
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const totalAmount = finalTotal;
+
+      // Step 1: Show loading - Processing checkout
+      loadingAlert = showAlert.loading(
+        'Processing Checkout',
+        'Please wait while we process your order...',
+        {
+          width: 400,
+          padding: '1.5rem',
+        }
+      );
+
+      // Step 2: Create order
+      const orderItems = cartItems.map((item) => {
+        const productId = parseInt(item.id);
+        const quantity = parseInt(item.quantity || 1);
+        
+        if (isNaN(productId) || isNaN(quantity) || quantity < 1) {
+          throw new Error(`Invalid cart item: ${item.id}`);
+        }
+        
+        return {
+          product_id: productId,
+          quantity: quantity,
+        };
+      });
+
+      const orderData = {
+        items: orderItems,
+        subtotal: subtotal,
+        tax_amount: 0,
+        discount_amount: discountPercent > 0 ? (subtotal - finalTotal) : 0,
+        total_amount: totalAmount,
+        currency: 'PHP',
+        billing_address: null,
+        shipping_address: null,
+      };
+
+      console.log('Creating order...', orderData);
+
+      // Update loading message - Creating order
+      Swal.update({
+        title: 'Creating Your Order',
+        html: 'Please wait while we create your order...',
+      });
+
+      const orderResponse = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json().catch(() => ({}));
+        console.error('Order creation error:', errorData);
+        throw new Error(errorData.message || 'Failed to create order');
+      }
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResult.success || !orderResult.order) {
+        throw new Error('Failed to create order');
+      }
+
+      const order = orderResult.order;
+      console.log('Order created:', order);
+
+      // Step 3: Update loading message - Preparing payment
+      Swal.update({
+        title: 'Preparing Payment',
+        html: 'Please wait while we prepare your payment checkout...',
+      });
+
+      // Step 4: Create PayMaya checkout
+      const baseUrl = window.location.origin;
+      const successUrl = `${baseUrl}/order/${order.order_number}`;
+      const cancelUrl = `${baseUrl}/`;
+      const failureUrl = `${baseUrl}/`;
+
+      const orderDescription = cartItems.length === 1 
+        ? cartItems[0].title || cartItems[0].name 
+        : `${cartItems.length} items`;
+
+      // Prepare customer data for PayMaya
+      const customerData = {};
+      if (customer) {
+        const nameParts = (customer.name || '').split(' ');
+        customerData.name = customer.name || 'Customer';
+        customerData.first_name = nameParts[0] || 'Customer';
+        customerData.last_name = nameParts.slice(1).join(' ') || '';
+        customerData.email = customer.email || '';
+      }
+
+      const checkoutResponse = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/payments/paymaya/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: totalAmount,
+          order_id: order.id,
+          order_number: order.order_number,
+          description: orderDescription,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          failure_url: failureUrl,
+          customer: customerData,
+        }),
+      });
+
+      if (!checkoutResponse.ok) {
+        const errorData = await checkoutResponse.json().catch(() => ({}));
+        console.error('PayMaya checkout error:', errorData);
+        throw new Error(errorData.message || 'Failed to create payment checkout');
+      }
+
+      const checkoutResult = await checkoutResponse.json();
+      
+      if (!checkoutResult.success || !checkoutResult.checkout) {
+        throw new Error('Failed to create payment checkout');
+      }
+
+      console.log('PayMaya checkout created:', checkoutResult);
+
+      // Step 5: Update loading message - Redirecting
+      Swal.update({
+        title: 'Redirecting to Payment',
+        html: 'Please wait while we redirect you to the payment page...',
+      });
+
+      // Step 6: Store order info and redirect to PayMaya
+      localStorage.setItem('pending_order', JSON.stringify({
+        order_id: order.id,
+        order_number: order.order_number,
+      }));
+
+      // Clear cart after successful order creation
+      clearCart();
+
+      // Small delay to show the redirecting message, then redirect
+      setTimeout(() => {
+        // Close loading alert before redirect
+        Swal.close();
+        // Redirect to PayMaya checkout
+        window.location.href = checkoutResult.checkout.redirect_url;
+      }, 500);
+
+    } catch (err) {
+      console.error('Checkout error:', err);
+      
+      // Close loading alert if it's still open
+      if (loadingAlert) {
+        Swal.close();
+      }
+      
+      // Show error alert
+      showAlert.error(
+        'Checkout Failed',
+        err.message || 'An error occurred during checkout. Please try again.',
+        {
+          width: 400,
+          padding: '1.5rem',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#dc3545',
+        }
+      );
+      
+      setIsProcessingCheckout(false);
+      setCartOpen(true); // Reopen cart on error
+    }
+  };
 
   return (
     <>
@@ -641,31 +850,26 @@ const CartPanel = () => {
                       </span>
                     </div>
                     <motion.button
-                      whileHover={{ y: -2, backgroundColor: '#222222' }}
-                      whileTap={{ y: 0 }}
+                      whileHover={!isProcessingCheckout ? { y: -2, backgroundColor: '#222222' } : {}}
+                      whileTap={!isProcessingCheckout ? { y: 0 } : {}}
                       type="button"
                       style={{
                         width: '100%',
                         padding: '0.9rem 1.5rem',
-                        backgroundColor: '#000000',
+                        backgroundColor: isProcessingCheckout ? '#666' : '#000000',
                         color: '#FFFFFF',
                         border: 'none',
                         borderRadius: '4px',
                         fontSize: '0.98rem',
                         fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: isProcessingCheckout ? 'not-allowed' : 'pointer',
                         marginTop: '0.25rem',
+                        opacity: isProcessingCheckout ? 0.7 : 1,
                       }}
-                      onClick={() => {
-                        if (!isAuthenticated) {
-                          setShowLoginModal(true);
-                        } else {
-                          setCartOpen(false);
-                          navigate('/checkout');
-                        }
-                      }}
+                      onClick={handleCheckout}
+                      disabled={isProcessingCheckout}
                     >
-                      Checkout
+                      {isProcessingCheckout ? 'Processing...' : 'Checkout'}
                     </motion.button>
                   </div>
                 </>
@@ -679,8 +883,19 @@ const CartPanel = () => {
         {showLoginModal && (
           <PublicLogin
             key="login-modal"
-            onClose={() => setShowLoginModal(false)}
-            returnTo="/checkout"
+            onClose={async () => {
+              setShowLoginModal(false);
+              // Small delay to ensure auth state is updated after login
+              setTimeout(async () => {
+                // Re-check auth state after login
+                const token = localStorage.getItem('customer_token');
+                if (token && cartItems.length > 0) {
+                  // Customer is now authenticated, proceed with checkout
+                  await handleCheckout();
+                }
+              }, 1000);
+            }}
+            returnTo="/"
           />
         )}
       </AnimatePresence>

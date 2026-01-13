@@ -6,6 +6,7 @@ import OtpVerificationModal from '../../../components/OtpVerificationModal';
 import GoogleSignupButton from '../../../components/GoogleSignupButton';
 import GoogleLoginButton from '../../../components/GoogleLoginButton';
 import { showAlert } from '../../../services/notificationService';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // Accept optional props so this can be used as a modal overlay
 // onClose: close handler when used as modal
@@ -13,6 +14,7 @@ import { showAlert } from '../../../services/notificationService';
 const Login = ({ onClose, returnTo }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { checkAuth } = useAuth();
   const isAuthSwap = Boolean(location.state?.authSwap);
   const [isModalVisible, setIsModalVisible] = useState(true);
   const pendingCloseActionRef = useRef(null);
@@ -330,7 +332,7 @@ const Login = ({ onClose, returnTo }) => {
   };
 
   // Handle Google login success (Firebase)
-  const handleGoogleLoginSuccess = (data) => {
+  const handleGoogleLoginSuccess = async (data) => {
     console.log('✅ Google login success:', data);
     setGoogleLoginLoading(false);
     setLoginLoading(false);
@@ -340,10 +342,15 @@ const Login = ({ onClose, returnTo }) => {
       localStorage.setItem('customer_token', data.token);
     }
 
+    // Refresh auth context to update authentication state
+    if (checkAuth) {
+      await checkAuth();
+    }
+
     showAlert.close();
     
-    // Show success message and redirect to checkout
-    showAlert.success('Login successful', 'Welcome back! Redirecting to checkout...', {
+    // Show success message and redirect to home
+    showAlert.success('Login successful', 'Welcome back! Redirecting to home...', {
       width: 340,
       padding: '0.9rem 1rem',
       confirmButtonText: 'OK',
@@ -356,8 +363,8 @@ const Login = ({ onClose, returnTo }) => {
         onClose();
       }
       
-      // Navigate to checkout page
-      navigate('/checkout');
+      // Redirect to home page after login
+      navigate('/');
     });
   };
 
@@ -702,10 +709,15 @@ const Login = ({ onClose, returnTo }) => {
             localStorage.setItem('customer_token', data.token);
           }
   
+          // Refresh auth context to update authentication state
+          if (checkAuth) {
+            await checkAuth();
+          }
+  
           showAlert.close();
           
-          // Show success message and redirect to checkout
-          showAlert.success('Login successful', 'Welcome back! Redirecting to checkout...', {
+          // Show success message and redirect to home
+          showAlert.success('Login successful', 'Welcome back! Redirecting to home...', {
             width: 340,
             padding: '0.9rem 1rem',
             confirmButtonText: 'OK',
@@ -718,8 +730,8 @@ const Login = ({ onClose, returnTo }) => {
               onClose();
             }
             
-            // Navigate to checkout page
-            navigate('/checkout');
+            // Redirect to home page after login
+            navigate('/');
           });
         } else {
           // HANDLE ALL ERROR CASES

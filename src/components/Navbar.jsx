@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import logoImage from '../assets/images/logo.jpg';
 import './Navbar.css';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
+import PublicLogin from '../pages/public/auth/Login';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -12,6 +14,9 @@ const Navbar = () => {
   const location = useLocation();
   const navRef = useRef(null);
   const { setCartOpen, getCartItemCount } = useCart();
+  const { isCustomerAuthenticated, checkAuth } = useAuth();
+  const navigate = useNavigate();
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
     // Close the mobile menu on route change
@@ -142,6 +147,7 @@ const Navbar = () => {
   ];
 
   return (
+    <>
     <motion.nav 
       className="navbar px-0"
       ref={navRef}
@@ -289,6 +295,14 @@ const Navbar = () => {
               whileHover={{ opacity: 0.7 }}
               whileTap={{ opacity: 0.5 }}
               transition={{ duration: 0.2 }}
+              onClick={async () => {
+                const token = localStorage.getItem('customer_token');
+                if (token && isCustomerAuthenticated) {
+                  navigate('/orders');
+                } else {
+                  setShowLoginModal(true);
+                }
+              }}
             >
               <svg
                 className="navbar-icon-svg"
@@ -483,6 +497,16 @@ const Navbar = () => {
         </AnimatePresence>
       </div>
     </motion.nav>
+    {showLoginModal && (
+      <PublicLogin
+        onClose={async () => {
+          setShowLoginModal(false);
+          await checkAuth();
+        }}
+        returnTo="/orders"
+      />
+    )}
+    </>
   );
 };
 

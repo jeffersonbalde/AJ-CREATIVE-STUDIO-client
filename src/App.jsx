@@ -6,7 +6,8 @@ import Home from './pages/Home';
 import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Contact from './pages/Contact';
-import Checkout from './pages/Checkout';
+import OrderConfirmation from './pages/OrderConfirmation';
+import Orders from './pages/Orders';
 import GcashPayment from './pages/GcashPayment';
 import Login from './pages/Login'; // admin login
 import PublicLogin from './pages/public/auth/Login';
@@ -79,7 +80,8 @@ const AppContent = () => {
             <Route path="/contact" element={<Contact />} />
             <Route path="/auth/login" element={<PublicLogin />} />
             <Route path="/auth/signup" element={<Signup />} />
-            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/order/:orderNumber" element={<OrderConfirmation />} />
+            <Route path="/orders" element={<Orders />} />
             <Route path="/gcash-payment" element={<GcashPayment />} />
 
             {/* Admin Routes */}
