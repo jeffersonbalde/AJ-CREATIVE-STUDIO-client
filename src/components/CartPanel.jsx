@@ -372,8 +372,8 @@ const CartPanel = () => {
         order_number: order.order_number,
       }));
 
-      // Clear cart after successful order creation
-      clearCart();
+      // DO NOT clear cart here - only clear after successful payment confirmation
+      // Cart will be cleared in OrderConfirmation.jsx when order is confirmed as paid
 
       // Small delay to show the redirecting message, then redirect
       setTimeout(() => {

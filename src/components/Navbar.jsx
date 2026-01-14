@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import logoImage from '../assets/images/logo.jpg';
@@ -6,6 +7,7 @@ import './Navbar.css';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import PublicLogin from '../pages/public/auth/Login';
+import { showAlert } from '../services/notificationService';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -14,9 +16,32 @@ const Navbar = () => {
   const location = useLocation();
   const navRef = useRef(null);
   const { setCartOpen, getCartItemCount } = useCart();
-  const { isCustomerAuthenticated, checkAuth } = useAuth();
+  const { isCustomerAuthenticated, customer, logout, checkAuth } = useAuth();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const userDropdownRef = useRef(null);
+  const userButtonRef = useRef(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showUserDropdown) {
+        // Check if click is outside both the button and the dropdown (which is in portal)
+        const clickedButton = userButtonRef.current && userButtonRef.current.contains(event.target);
+        const clickedDropdown = event.target.closest('[data-user-dropdown="true"]');
+        
+        if (!clickedButton && !clickedDropdown) {
+          setShowUserDropdown(false);
+        }
+      }
+    };
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showUserDropdown]);
 
   useEffect(() => {
     // Close the mobile menu on route change
@@ -286,19 +311,21 @@ const Navbar = () => {
               </svg>
             </motion.button>
 
-            {/* User/Person icon */}
+            {/* User/Person icon with dropdown */}
+            <div ref={userDropdownRef} style={{ position: 'relative' }}>
             <motion.button
+                ref={userButtonRef}
               type="button"
               className="btn btn-link p-0 navbar-icon-btn navbar-user-btn"
               style={{ color: '#000', textDecoration: 'none' }}
               aria-label="User Account"
+                aria-expanded={showUserDropdown}
               whileHover={{ opacity: 0.7 }}
               whileTap={{ opacity: 0.5 }}
               transition={{ duration: 0.2 }}
-              onClick={async () => {
-                const token = localStorage.getItem('customer_token');
-                if (token && isCustomerAuthenticated) {
-                  navigate('/orders');
+                onClick={() => {
+                  if (isCustomerAuthenticated) {
+                    setShowUserDropdown(!showUserDropdown);
                 } else {
                   setShowLoginModal(true);
                 }
@@ -321,6 +348,115 @@ const Navbar = () => {
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </motion.button>
+            </div>
+
+            {/* User Dropdown Menu - Rendered via Portal to avoid overflow clipping */}
+            {showUserDropdown && isCustomerAuthenticated && userButtonRef.current && createPortal(
+              <motion.div
+                data-user-dropdown="true"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  position: 'fixed',
+                  top: userButtonRef.current.getBoundingClientRect().bottom + 8,
+                  right: window.innerWidth - userButtonRef.current.getBoundingClientRect().right,
+                  backgroundColor: '#fff',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: '200px',
+                  zIndex: 10000,
+                  overflow: 'hidden',
+                }}
+                onMouseLeave={() => setShowUserDropdown(false)}
+              >
+                  {/* User Info */}
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111' }}>
+                      {customer?.name || 'Customer'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+                      {customer?.email || ''}
+                    </div>
+                  </div>
+
+                  {/* Menu Items */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        navigate('/orders');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        color: '#333',
+                        transition: 'background-color 0.2s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <i className="fas fa-shopping-bag me-2" style={{ width: '16px' }}></i>
+                      My Orders
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setShowUserDropdown(false);
+                        const result = await showAlert.confirm(
+                          'Logout',
+                          'Are you sure you want to logout?',
+                          'Logout',
+                          'Cancel',
+                          {
+                            confirmButtonColor: '#ffc107',
+                            cancelButtonColor: '#6c757d',
+                            width: 340,
+                            padding: '0.9rem 1rem',
+                          }
+                        );
+                        if (result.isConfirmed) {
+                          await logout();
+                          showAlert.success('Logged Out', 'You have been logged out successfully.', {
+                            width: 340,
+                            padding: '0.9rem 1rem',
+                            confirmButtonText: 'OK',
+                            confirmButtonColor: '#ffc107',
+                            timer: 2000,
+                            timerProgressBar: true,
+                          });
+                          navigate('/');
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        color: '#dc3545',
+                        transition: 'background-color 0.2s',
+                        borderTop: '1px solid #e5e7eb',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fef2f2')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <i className="fas fa-sign-out-alt me-2" style={{ width: '16px' }}></i>
+                      Logout
+                    </button>
+                  </div>
+                </motion.div>,
+                document.body
+              )}
 
             {/* Shopping Cart with badge */}
             <div style={{ position: 'relative', overflow: 'visible' }}>

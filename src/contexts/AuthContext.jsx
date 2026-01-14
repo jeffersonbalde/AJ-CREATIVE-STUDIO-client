@@ -147,8 +147,17 @@ export const AuthProvider = ({ children }) => {
         });
       }
       
-      // Handle customer logout (if customer token exists, just clear it - no backend endpoint needed)
-      // Note: Customer tokens are managed by Sanctum and will be revoked when they expire
+      // Handle customer logout - call backend to revoke token
+      const customerToken = localStorage.getItem('customer_token');
+      if (customerToken) {
+        await fetch(`${apiBaseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Accept': 'application/json',
+          },
+        });
+      }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

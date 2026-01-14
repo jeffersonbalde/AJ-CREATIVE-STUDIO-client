@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getProductImage } from '../utils/productImageUtils';
+import logoImage from '../assets/images/logo.jpg';
 
 const formatPHP = (value) =>
   new Intl.NumberFormat('en-PH', {
@@ -27,6 +28,7 @@ const OrderConfirmation = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   useEffect(() => {
     // Refresh auth state before fetching order (in case token was lost during PayMaya redirect)
@@ -38,21 +40,54 @@ const OrderConfirmation = () => {
     } else {
       fetchOrder();
     }
-    
-    // Clear cart after successful order
-    const pendingOrder = localStorage.getItem('pending_order');
-    if (pendingOrder) {
-      try {
-        const orderData = JSON.parse(pendingOrder);
-        if (orderData.order_number === orderNumber) {
-          clearCart();
-          localStorage.removeItem('pending_order');
+  }, [orderNumber]);
+
+  // If order is not yet marked as paid when customer returns from PayMaya,
+  // poll the backend for a short time until the webhook updates it to "paid".
+  useEffect(() => {
+    if (!order || order.payment_status === 'paid') {
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 10; // ~30 seconds total if interval is 3s
+
+    const intervalId = setInterval(() => {
+      attempts += 1;
+      fetchOrder();
+
+      if (attempts >= maxAttempts) {
+        clearInterval(intervalId);
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+    // We only care about changes in payment_status for this polling
+  }, [order?.payment_status, orderNumber]);
+
+  // Clear cart and show modal after order is confirmed as paid
+  useEffect(() => {
+    if (order && order.payment_status === 'paid') {
+      const key = `cart_cleared_and_modal_shown_${order.order_number}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, 'true');
+
+        // Prevent CartContext from re-loading cart from backend in this session
+        try {
+          sessionStorage.setItem('skip_backend_cart_load', 'true');
+        } catch (e) {
+          // Ignore sessionStorage errors
         }
-      } catch (e) {
-        console.error('Error parsing pending order:', e);
+
+        // Clear customer cart (frontend + backend via CartContext)
+            clearCart();
+            localStorage.removeItem('pending_order');
+
+        // Show email sent modal once
+        setShowEmailModal(true);
       }
     }
-  }, [orderNumber]);
+  }, [order?.payment_status, order, clearCart]);
 
   const fetchOrder = async () => {
     try {
@@ -216,7 +251,100 @@ const OrderConfirmation = () => {
     window.location.href = url;
   };
 
+  const getCustomerEmail = () => {
+    if (order.customer && order.customer.email) {
+      return order.customer.email;
+    }
+    return order.guest_email || 'your email';
+  };
+
   return (
+    <>
+      {/* Email Sent Modal */}
+      <AnimatePresence>
+        {showEmailModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowEmailModal(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10000,
+              padding: '1rem',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: '#fff',
+                borderRadius: '12px',
+                padding: '2rem',
+                maxWidth: '500px',
+                width: '100%',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              }}
+            >
+              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '64px', marginBottom: '1rem' }}>📧</div>
+                <img
+                  src={logoImage}
+                  alt="AJ Creative Studio"
+                  style={{
+                    height: '40px',
+                    width: 'auto',
+                    marginBottom: '1rem',
+                  }}
+                />
+                <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: 700, color: '#000' }}>
+                  Product Sent Successfully!
+                </h2>
+                <p style={{ margin: 0, color: '#666', fontSize: '0.95rem' }}>
+                  Your order details and product files have been sent to <strong>{getCustomerEmail()}</strong>
+                </p>
+              </div>
+
+              <div style={{
+                backgroundColor: '#f9f9f9',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginBottom: '1.5rem',
+              }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#333', lineHeight: 1.6 }}>
+                  📎 An Excel file with your order details has been attached to the email.<br />
+                  🔗 Download links for your products are included in the email.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowEmailModal(false)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  backgroundColor: '#000',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                OK, Got it!
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     <div
       style={{
         minHeight: '80vh',
@@ -435,6 +563,7 @@ const OrderConfirmation = () => {
         </div>
       </motion.div>
     </div>
+    </>
   );
 };
 

@@ -12,6 +12,8 @@ import GcashPayment from './pages/GcashPayment';
 import Login from './pages/Login'; // admin login
 import PublicLogin from './pages/public/auth/Login';
 import Signup from './pages/public/auth/Signup';
+import ForgotPassword from './pages/public/auth/ForgotPassword';
+import ResetPassword from './pages/public/auth/ResetPassword';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductList from './pages/admin/ProductList';
 import ProductCategories from './pages/admin/ProductCategories';
@@ -80,6 +82,8 @@ const AppContent = () => {
             <Route path="/contact" element={<Contact />} />
             <Route path="/auth/login" element={<PublicLogin />} />
             <Route path="/auth/signup" element={<Signup />} />
+            <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+            <Route path="/auth/reset-password" element={<ResetPassword />} />
             <Route path="/order/:orderNumber" element={<OrderConfirmation />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/gcash-payment" element={<GcashPayment />} />

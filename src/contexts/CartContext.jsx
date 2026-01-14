@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
@@ -11,7 +12,7 @@ export const useCart = () => {
 };
 
 export const CartProvider = ({ children }) => {
-  // Load cart from localStorage on mount
+  const { isCustomerAuthenticated, customerToken } = useAuth();
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState(() => {
     try {
@@ -22,17 +23,218 @@ export const CartProvider = ({ children }) => {
       return [];
     }
   });
+  const [isLoadingCart, setIsLoadingCart] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncTimeoutRef = useRef(null);
+  const hasLoadedFromBackendRef = useRef(false);
+  const hasMergedGuestCartRef = useRef(false);
+  const prevAuthStateRef = useRef(isCustomerAuthenticated);
 
-  // Save cart to localStorage whenever it changes
+  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  // Load cart from backend when customer is authenticated
+  useEffect(() => {
+    const loadCartFromBackend = async () => {
+      // If we are currently on an order confirmation page, skip loading the
+      // cart from the backend on this mount. The order page itself will
+      // decide when and how to clear the cart after payment.
+      try {
+        if (typeof window !== 'undefined') {
+          const path = window.location.pathname || '';
+          if (path.startsWith('/order/')) {
+            return;
+          }
+        }
+      } catch (e) {
+        // Ignore path detection errors
+      }
+
+      // If we've explicitly decided to skip backend load for this session
+      // (legacy flag), do nothing.
+      try {
+        if (typeof window !== 'undefined') {
+          const skip = sessionStorage.getItem('skip_backend_cart_load');
+          if (skip === 'true') {
+            return;
+          }
+        }
+      } catch (e) {
+        // Ignore sessionStorage errors
+      }
+
+      if (!isCustomerAuthenticated || !customerToken || hasLoadedFromBackendRef.current) {
+        return;
+      }
+
+      try {
+        setIsLoadingCart(true);
+        
+        // Check if there's a guest cart to merge (only once, on first login)
+        const guestCart = localStorage.getItem('cart_items');
+        let guestItems = [];
+        let shouldMergeGuestCart = false;
+        
+        if (guestCart && !hasMergedGuestCartRef.current) {
+          try {
+            guestItems = JSON.parse(guestCart);
+            shouldMergeGuestCart = guestItems.length > 0;
+          } catch (e) {
+            console.error('Error parsing guest cart:', e);
+          }
+        }
+
+        // Load cart from backend
+        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            const backendCart = data.cart || [];
+            
+            // If there's a guest cart to merge (first time only), merge it
+            if (shouldMergeGuestCart && !hasMergedGuestCartRef.current) {
+              // Merge guest cart with backend cart (backend will handle the merge logic)
+              await mergeGuestCart(guestItems);
+              hasMergedGuestCartRef.current = true;
+              // Clear guest cart from localStorage after merge
+              localStorage.removeItem('cart_items');
+            } else {
+              // No merge needed, just load backend cart
+              if (backendCart.length === 0) {
+                setCartItems([]);
+                localStorage.removeItem('cart_items');
+              } else {
+                setCartItems(backendCart);
+                localStorage.setItem('cart_items', JSON.stringify(backendCart));
+              }
+              hasLoadedFromBackendRef.current = true;
+            }
+          }
+        } else {
+          // If backend fails, keep guest cart if available (fallback)
+          // But don't merge, just use guest cart as-is
+          if (guestItems.length > 0) {
+            setCartItems(guestItems);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading cart from backend:', error);
+        // Fallback to localStorage if backend fails
+      } finally {
+        setIsLoadingCart(false);
+      }
+    };
+
+    loadCartFromBackend();
+  }, [isCustomerAuthenticated, customerToken]);
+
+  // Reset flags and clear cart when customer logs out (not when simply not authenticated)
+  useEffect(() => {
+    // Only clear cart if transitioning from authenticated to non-authenticated (actual logout)
+    if (prevAuthStateRef.current === true && isCustomerAuthenticated === false) {
+      hasLoadedFromBackendRef.current = false;
+      hasMergedGuestCartRef.current = false;
+      // Clear cart when customer logs out
+      setCartItems([]);
+      localStorage.removeItem('cart_items');
+    }
+    // Update previous auth state
+    prevAuthStateRef.current = isCustomerAuthenticated;
+  }, [isCustomerAuthenticated]);
+
+  // Merge guest cart with backend cart (only called once on first login)
+  const mergeGuestCart = async (guestItems) => {
+    if (!isCustomerAuthenticated || !customerToken || hasMergedGuestCartRef.current) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/merge`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${customerToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ items: guestItems }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.cart) {
+          // Update local state from merged cart
+          setCartItems(data.cart);
+          if (data.cart.length === 0) {
+            localStorage.removeItem('cart_items');
+          } else {
+            localStorage.setItem('cart_items', JSON.stringify(data.cart));
+          }
+          hasLoadedFromBackendRef.current = true;
+          hasMergedGuestCartRef.current = true;
+        }
+      }
+    } catch (error) {
+      console.error('Error merging guest cart:', error);
+    }
+  };
+
+  // Note: Removed auto-sync function - all syncs now happen explicitly in add/remove/update methods
+  // This prevents race conditions and ensures backend is always the source of truth
+
+  // Save cart to localStorage whenever it changes (but don't auto-sync to backend)
+  // Backend sync happens explicitly in addToCart, removeFromCart, updateQuantity, etc.
   useEffect(() => {
     try {
-      localStorage.setItem('cart_items', JSON.stringify(cartItems));
+      if (cartItems.length === 0) {
+        localStorage.removeItem('cart_items');
+      } else {
+        localStorage.setItem('cart_items', JSON.stringify(cartItems));
+      }
     } catch (error) {
-      console.error('Error saving cart to localStorage:', error);
+      console.error('Error saving cart:', error);
     }
   }, [cartItems]);
 
-  const addToCart = (product) => {
+  const addToCart = async (product) => {
+    // If authenticated, add to backend first, then update local state from response
+    if (isCustomerAuthenticated && customerToken) {
+      try {
+        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/add`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            product_id: parseInt(product.id),
+            quantity: 1,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.cart) {
+            // Update local state from backend response (source of truth)
+            setCartItems(data.cart);
+            localStorage.setItem('cart_items', JSON.stringify(data.cart));
+            return; // Success, exit early
+          }
+        }
+        // If backend call fails, fall through to local update
+      } catch (error) {
+        console.error('Error adding to cart in backend:', error);
+        // Fall through to local update if backend fails
+      }
+    }
+
+    // For guest users or if backend call failed, update local state
     const existingItemIndex = cartItems.findIndex(item => item.id === product.id);
     
     if (existingItemIndex >= 0) {
@@ -44,18 +246,97 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const removeFromCart = (productId) => {
-    setCartItems(cartItems.filter(item => item.id !== productId));
+  const removeFromCart = async (productId) => {
+    // If authenticated, remove from backend first, then update local state
+    if (isCustomerAuthenticated && customerToken) {
+      try {
+        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/remove/${productId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // Update local state from backend response (source of truth)
+            const updatedCart = data.cart || [];
+            setCartItems(updatedCart);
+            if (updatedCart.length === 0) {
+              localStorage.removeItem('cart_items');
+            } else {
+              localStorage.setItem('cart_items', JSON.stringify(updatedCart));
+            }
+            return; // Success, exit early
+          }
+        }
+        // If backend call fails, fall through to local update
+      } catch (error) {
+        console.error('Error removing from cart in backend:', error);
+        // Fall through to local update if backend fails
+      }
+    }
+
+    // For guest users or if backend call failed, update local state
+    const updatedCart = cartItems.filter(item => item.id !== productId);
+    setCartItems(updatedCart);
+    if (updatedCart.length === 0) {
+      localStorage.removeItem('cart_items');
+    } else {
+      localStorage.setItem('cart_items', JSON.stringify(updatedCart));
+    }
   };
 
-  const updateQuantity = (productId, quantity) => {
+  const updateQuantity = async (productId, quantity) => {
     if (quantity <= 0) {
       removeFromCart(productId);
+      return;
+    }
+
+    // If authenticated, update backend first, then update local state from response
+    if (isCustomerAuthenticated && customerToken) {
+      try {
+        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/update/${productId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ quantity }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.cart) {
+            // Update local state from backend response (source of truth)
+            setCartItems(data.cart);
+            if (data.cart.length === 0) {
+              localStorage.removeItem('cart_items');
+            } else {
+              localStorage.setItem('cart_items', JSON.stringify(data.cart));
+            }
+            return; // Success, exit early
+          }
+        }
+        // If backend call fails, fall through to local update
+      } catch (error) {
+        console.error('Error updating cart quantity in backend:', error);
+        // Fall through to local update if backend fails
+      }
+    }
+
+    // For guest users or if backend call failed, update local state
+    const updatedCart = cartItems.map(item =>
+      item.id === productId ? { ...item, quantity } : item
+    );
+    setCartItems(updatedCart);
+    if (updatedCart.length === 0) {
+      localStorage.removeItem('cart_items');
     } else {
-      const updatedCart = cartItems.map(item =>
-        item.id === productId ? { ...item, quantity } : item
-      );
-      setCartItems(updatedCart);
+      localStorage.setItem('cart_items', JSON.stringify(updatedCart));
     }
   };
 
@@ -67,10 +348,46 @@ export const CartProvider = ({ children }) => {
     return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
-  const clearCart = () => {
+  const clearCart = async () => {
     setCartItems([]);
     localStorage.removeItem('cart_items');
+
+    // Clear backend cart too (use token from context or localStorage so it works
+    // even if AuthContext hasn't finished updating yet after PayMaya redirect)
+    try {
+      const tokenFromContext = customerToken;
+      const tokenFromStorage =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('customer_token')
+          : null;
+      const authToken = tokenFromContext || tokenFromStorage;
+
+      if (authToken) {
+        await fetch(
+          `${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/clear`,
+          {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              Accept: 'application/json',
+            },
+          },
+        );
+      }
+    } catch (error) {
+      console.error('Error clearing cart in backend:', error);
+      // Continue with local state if sync fails
+    }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <CartContext.Provider
@@ -85,6 +402,8 @@ export const CartProvider = ({ children }) => {
         getCartItemCount,
         getCartTotal,
         clearCart,
+        isLoadingCart,
+        isSyncing,
       }}
     >
       {children}

@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import PublicLogin from './public/auth/Login';
 import { getProductImage } from '../utils/productImageUtils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Component to handle product thumbnail with fallback
 const ProductThumbnail = ({ product, productName, size = 'small' }) => {
   const [imageError, setImageError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const thumbnailUrl = getProductImage(product);
 
   const fontSize = size === 'small' ? '0.7rem' : '0.875rem';
@@ -20,16 +22,35 @@ const ProductThumbnail = ({ product, productName, size = 'small' }) => {
   }
 
   return (
-    <img
-      src={thumbnailUrl}
-      alt={productName}
-      style={{
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-      }}
-      onError={() => setImageError(true)}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {!isLoaded && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 1.5s ease-in-out infinite',
+            zIndex: 1,
+          }}
+        />
+      )}
+      <img
+        src={thumbnailUrl}
+        alt={productName}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: isLoaded ? 1 : 0,
+          transition: 'opacity 0.25s ease',
+        }}
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setImageError(true)}
+      />
+    </div>
   );
 };
 
@@ -115,7 +136,15 @@ const Orders = () => {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAFAFA' }}>
+      <div
+        style={{
+          minHeight: '80vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#FAFAFA',
+        }}
+      >
         <div style={{ textAlign: 'center' }}>
           <div className="spinner-border text-primary mb-3" role="status">
             <span className="visually-hidden">Loading...</span>
@@ -159,90 +188,146 @@ const Orders = () => {
     );
   }
 
-  return (
-    <div
-      style={{
-        minHeight: '80vh',
-        padding: '2.25rem 1rem 2rem',
-        maxWidth: '1100px',
-        margin: '0 auto',
-        backgroundColor: '#FAFAFA',
-      }}
-    >
-      <div style={{ marginBottom: '1.75rem' }}>
-        <h1 style={{ marginBottom: '0.4rem', fontSize: '2rem', fontWeight: 700 }}>Orders</h1>
-        <p style={{ color: '#6b7280', fontSize: '0.98rem' }}>Review completed purchases and download files anytime.</p>
-      </div>
+  const containerVariants = {
+    hidden: { opacity: 0, y: 24 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.6,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    },
+  };
 
-      {orders.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '2rem 1.75rem',
-            background: '#fff',
-            borderRadius: '14px',
-            boxShadow: '0 10px 30px rgba(15,23,42,0.06)',
-          }}
+  const listVariants = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: 0.04,
+        delayChildren: 0.08,
+      },
+    },
+  };
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 14 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+    },
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', position: 'relative', overflowX: 'hidden', width: '100%' }}>
+      <section
+        style={{
+          backgroundColor: '#FFFFFF',
+          position: 'relative',
+          paddingTop: 'var(--navbar-height, 0)',
+          paddingBottom: '4rem',
+          paddingLeft: '1rem',
+          paddingRight: '1rem',
+          marginTop: '0px',
+          overflowX: 'hidden',
+          width: '100%',
+          maxWidth: '100vw',
+        }}
+      >
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={containerVariants}
+          style={{ maxWidth: '1100px', margin: '0 auto' }}
         >
-          <p style={{ marginBottom: '0.9rem', color: '#6b7280', fontSize: '0.98rem' }}>No completed purchases yet.</p>
-          <button
-            onClick={() => navigate('/all-products')}
-            style={{
-              padding: '0.7rem 1.4rem',
-              backgroundColor: '#000',
-              color: '#FFF',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            Shop Products
-          </button>
-        </div>
-      ) : (
-        Object.entries(groupOrdersByDate(orders)).map(([date, dateOrders]) => (
-          <div key={date} style={{ marginBottom: '2rem' }}>
-            <h2
-              style={{
-                fontSize: '1.1rem',
-                fontWeight: 600,
-                color: '#1f2937',
-                marginBottom: '1rem',
-                paddingLeft: '0.25rem',
-              }}
-            >
-              {date}
-            </h2>
+          <div style={{ marginBottom: '2rem' }}>
+            <h1 style={{ marginBottom: '0.4rem', fontSize: '2rem', fontWeight: 700, color: '#000' }}>
+              Orders
+            </h1>
+            <p style={{ color: '#666', fontSize: '1rem', margin: 0 }}>
+              Review completed purchases and download files anytime.
+            </p>
+          </div>
+
+          {orders.length === 0 ? (
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: '1rem',
+                textAlign: 'center',
+                padding: '3rem 1.75rem',
+                background: '#fff',
+                borderRadius: '12px',
+                border: '1px solid #E0E0E0',
               }}
             >
-              {dateOrders.map((order) => (
-                <div
-                  key={order.id}
+              <p style={{ marginBottom: '0.9rem', color: '#666', fontSize: '1rem' }}>
+                No completed purchases yet.
+              </p>
+              <button
+                onClick={() => navigate('/all-products')}
+                style={{
+                  padding: '0.75rem 1.4rem',
+                  backgroundColor: '#000',
+                  color: '#FFF',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                Shop Products
+              </button>
+            </div>
+          ) : (
+            Object.entries(groupOrdersByDate(orders)).map(([date, dateOrders]) => (
+              <div key={date} style={{ marginBottom: '2.25rem' }}>
+                <h2
                   style={{
-                    background: '#fff',
-                    borderRadius: '12px',
-                    padding: '1rem',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                    border: '1px solid #e5e7eb',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    color: '#111827',
+                    marginBottom: '1rem',
+                    paddingLeft: '0.25rem',
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                  onClick={() => navigate(`/order/${order.order_number}`)}
                 >
+                  {date}
+                </h2>
+
+                <motion.div
+                  initial="hidden"
+                  animate="visible"
+                  variants={listVariants}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                    gap: '1rem',
+                  }}
+                >
+                  {dateOrders.map((order) => (
+                    <motion.div
+                      key={order.id}
+                      variants={cardVariants}
+                      style={{
+                        background: '#fff',
+                        borderRadius: '12px',
+                        padding: '1rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                        border: '1px solid #e5e7eb',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow =
+                          '0 8px 18px rgba(15,23,42,0.10)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow =
+                          '0 1px 3px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                      onClick={() => navigate(`/order/${order.order_number}`)}
+                    >
                   {/* Order Header */}
                   <div
                     style={{
@@ -370,16 +455,24 @@ const Orders = () => {
                       Access order
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            ))
+          )}
 
-      {showLoginModal && (
-        <PublicLogin onClose={handleLoginClose} returnTo="/orders" />
-      )}
+          {showLoginModal && <PublicLogin onClose={handleLoginClose} returnTo="/orders" />}
+        </motion.div>
+      </section>
+
+      {/* Shimmer keyframes used by thumbnail skeletons */}
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+      `}</style>
     </div>
   );
 };

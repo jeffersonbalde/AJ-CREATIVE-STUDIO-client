@@ -23,11 +23,6 @@ const Login = ({ onClose, returnTo }) => {
   const [activeTab, setActiveTab] = useState('password'); // kept for potential future expansion
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState('');
-  const [passwordValidation, setPasswordValidation] = useState({
-    minLength: false,
-    hasLetter: false,
-    hasNumber: false,
-  });
   const [isSignup, setIsSignup] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -44,6 +39,9 @@ const Login = ({ onClose, returnTo }) => {
   const emailInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [googleSignupLoading, setGoogleSignupLoading] = useState(false);
   const [googleLoginLoading, setGoogleLoginLoading] = useState(false);
@@ -448,7 +446,7 @@ const Login = ({ onClose, returnTo }) => {
 
   // Focus email field when switching back to login form
   useEffect(() => {
-    if (!isSignup) {
+    if (!isSignup && !showForgotPassword && !showOtpModal) {
       // With AnimatePresence mode="wait", we need to wait for exit (0.5s) + enter (0.5s) animations
       const timer = setTimeout(() => {
         // Try multiple times to ensure the element is ready (max 10 attempts)
@@ -467,7 +465,7 @@ const Login = ({ onClose, returnTo }) => {
       }, 1100); // Wait for both exit and enter animations to complete
       return () => clearTimeout(timer);
     }
-  }, [isSignup]);
+  }, [isSignup, showForgotPassword, showOtpModal]);
 
   // Focus name field when signup form is shown
   useEffect(() => {
@@ -708,7 +706,7 @@ const Login = ({ onClose, returnTo }) => {
           if (data.token) {
             localStorage.setItem('customer_token', data.token);
           }
-  
+
           // Refresh auth context to update authentication state
           if (checkAuth) {
             await checkAuth();
@@ -872,17 +870,9 @@ const Login = ({ onClose, returnTo }) => {
               })
               .then((result) => {
                 if (result.isDismissed) {
-                  // User clicked "Forgot password" or canceled
-                  showAlert.info(
-                    'Reset password',
-                    'Password reset is not available yet. For now, please contact support or create a new account.',
-                    {
-                      width: 380,
-                      padding: '0.9rem 1rem',
-                      confirmButtonText: 'OK',
-                      confirmButtonColor: '#ffc107',
-                    }
-                  );
+                  // User clicked "Forgot password" - show forgot password view
+                  setForgotPasswordEmail(loginEmail); // Pre-fill with login email
+                  setShowForgotPassword(true);
                 }
               });
             setLoginLoading(false);
@@ -1007,6 +997,82 @@ const Login = ({ onClose, returnTo }) => {
     setName('');
     setEmail('');
     setSignupPassword('');
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+
+    if (!forgotPasswordEmail.trim()) {
+      showAlert.error('Email required', 'Please enter your email address.', {
+        width: 320,
+        padding: '0.9rem 1rem',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#ffc107',
+      });
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          email: forgotPasswordEmail.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      // Handle Google account response
+      if (response.ok && data.code === 'GOOGLE_ACCOUNT') {
+        showAlert.info(
+          'Google Account Detected',
+          'This account was created with Google. Please use "Sign in with Google" to access your account.',
+          {
+            width: 400,
+            padding: '0.9rem 1rem',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#4285F4',
+          }
+        ).then(() => {
+          setShowForgotPassword(false);
+        });
+        return;
+      }
+
+      // Handle success (generic message for security)
+      showAlert.success(
+        'Reset link sent',
+        'If an account exists with this email, a password reset link has been sent. Please check your inbox.',
+        {
+          width: 360,
+          padding: '0.9rem 1rem',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#ffc107',
+        }
+      ).then(() => {
+        setShowForgotPassword(false);
+      });
+    } catch (error) {
+      showAlert.error(
+        'Error',
+        'An error occurred. Please try again later.',
+        {
+          width: 320,
+          padding: '0.9rem 1rem',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#ffc107',
+        }
+      );
+    } finally {
+      setForgotPasswordLoading(false);
+    }
   };
 
   return (
@@ -1202,7 +1268,81 @@ const Login = ({ onClose, returnTo }) => {
             >
               <motion.div initial={{ opacity: 0, y: 100 }} animate={contentControls}>
                 <AnimatePresence mode="wait" initial={false}>
-                {!isSignup ? (
+                {showForgotPassword ? (
+                  <motion.div
+                    key="forgot-password"
+                    initial={{ opacity: 0, y: 100 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -100 }}
+                    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+                  >
+                    <div style={{ padding: '0 0 0.85rem', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        style={{
+                          fontSize: '0.9rem',
+                          textDecoration: 'underline',
+                          color: '#666',
+                          fontWeight: 600,
+                          marginBottom: '0.5rem',
+                          transition: 'color 0.2s ease',
+                        }}
+                        onClick={() => setShowForgotPassword(false)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = '#000';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = '#666';
+                        }}
+                      >
+                        ← Back to login
+                      </button>
+                      <h2 className="fw-bold mb-0" style={{ fontSize: '1.5rem', color: '#111', lineHeight: '1.2' }}>
+                        Forgot Password?
+                      </h2>
+                      <p className="text-muted mb-0 mt-1" style={{ fontSize: '0.9rem', color: '#666' }}>
+                        Enter your email address and we'll send you a link to reset your password.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleForgotPassword} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <div className="mb-4" style={{ flex: 1 }}>
+                        <label className="form-label" style={{ fontSize: '0.9rem', color: '#333', fontWeight: 500, marginBottom: '0.5rem' }}>
+                          Email:
+                        </label>
+                        <input
+                          type="email"
+                          className="form-control"
+                          placeholder="your.email@example.com"
+                          value={forgotPasswordEmail}
+                          onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                          style={{ fontSize: '0.95rem' }}
+                          required
+                          disabled={forgotPasswordLoading}
+                          autoFocus
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="btn btn-warning w-100 fw-semibold"
+                        disabled={forgotPasswordLoading}
+                        style={{
+                          color: '#000',
+                          fontSize: '0.98rem',
+                          padding: '0.75rem',
+                          opacity: forgotPasswordLoading ? 0.6 : 1,
+                          cursor: forgotPasswordLoading ? 'not-allowed' : 'pointer',
+                          marginTop: 'auto',
+                        }}
+                      >
+                        {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
+                      </button>
+                    </form>
+                  </motion.div>
+                ) : !isSignup ? (
                   <motion.div
                     key="login-form"
                     initial={{ opacity: 0, y: 100 }}
@@ -1250,13 +1390,13 @@ const Login = ({ onClose, returnTo }) => {
                   <div className="position-relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
-                      className={`form-control ${password && (passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? 'is-valid' : password && !(passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? 'is-invalid' : ''}`}
+                      className="form-control"
                       placeholder="••••••••"
                       value={password}
                       onChange={handlePasswordChange}
                       style={{ 
                         fontSize: '0.95rem',
-                        paddingRight: password && (passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? '70px' : password && !(passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? '70px' : '40px'
+                        paddingRight: '40px'
                       }}
                       required
                     />
@@ -1269,7 +1409,7 @@ const Login = ({ onClose, returnTo }) => {
                         setShowPassword(!showPassword);
                       }}
                       style={{
-                        right: password && (passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? '38px' : password && !(passwordValidation.minLength && passwordValidation.hasLetter && passwordValidation.hasNumber) ? '38px' : '8px',
+                        right: '8px',
                         top: '0',
                         bottom: '0',
                         height: 'auto',
@@ -1326,64 +1466,16 @@ const Login = ({ onClose, returnTo }) => {
                       )}
                     </button>
                   </div>
-                  {/* Password validation criteria */}
-                  <AnimatePresence>
-                    {password && (
-                      <motion.div
-                        key="validation-criteria"
-                        initial={{ opacity: 0, y: -10, height: 0 }}
-                        animate={{ opacity: 1, y: 0, height: 'auto' }}
-                        exit={{ opacity: 0, y: -10, height: 0 }}
-                        transition={{ duration: 0.3, ease: 'easeOut' }}
-                        style={{ marginTop: '0.5rem', fontSize: '0.85rem', overflow: 'hidden' }}
-                      >
-                        <motion.div
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          transition={{ duration: 0.25, delay: 0.05, ease: 'easeOut' }}
-                          style={{ 
-                            color: passwordValidation.minLength ? '#28a745' : '#dc3545',
-                            marginBottom: '0.25rem',
-                            transition: 'color 0.3s ease'
-                          }}
-                        >
-                          8 characters minimum
-                        </motion.div>
-                        <motion.div
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          transition={{ duration: 0.25, delay: 0.1, ease: 'easeOut' }}
-                          style={{ 
-                            color: passwordValidation.hasLetter ? '#28a745' : '#dc3545',
-                            marginBottom: '0.25rem',
-                            transition: 'color 0.3s ease'
-                          }}
-                        >
-                          At least one letter
-                        </motion.div>
-                        <motion.div
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          transition={{ duration: 0.25, delay: 0.15, ease: 'easeOut' }}
-                          style={{ 
-                            color: passwordValidation.hasNumber ? '#28a745' : '#dc3545',
-                            transition: 'color 0.3s ease'
-                          }}
-                        >
-                          At least one number
-                        </motion.div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
 
                 <div className="d-flex justify-content-end mb-3">
                   <button
                     type="button"
                     className="btn btn-link p-0"
+                    onClick={() => {
+                      setForgotPasswordEmail(loginEmail); // Pre-fill with login email
+                      setShowForgotPassword(true);
+                    }}
                     style={{ 
                       fontSize: '0.85rem',
                       textDecoration: 'underline',
