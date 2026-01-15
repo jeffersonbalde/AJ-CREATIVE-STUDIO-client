@@ -8,7 +8,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import { showAlert } from "../../services/notificationService";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { FaUsers, FaCheckCircle, FaTimesCircle, FaUserCheck, FaUserTimes } from 'react-icons/fa';
+import { FaUsers, FaCheckCircle, FaTimesCircle, FaUserCheck, FaUserTimes, FaEye } from 'react-icons/fa';
+import LoadingSpinner from '../../components/admin/LoadingSpinner';
+import CustomerDetailsModal from './CustomerDetailsModal';
 
 const CustomerList = () => {
   const { token } = useAuth();
@@ -36,6 +38,8 @@ const CustomerList = () => {
     verifiedCustomers: 0,
     unverifiedCustomers: 0,
   });
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -282,70 +286,10 @@ const CustomerList = () => {
     });
   };
 
-  // Skeleton loaders
-  const StatsCardSkeleton = () => (
-    <div 
-      className="card stats-card h-100 shadow-sm"
-      style={{ 
-        border: '1px solid rgba(0, 0, 0, 0.125)',
-        borderRadius: '0.375rem'
-      }}
-    >
-      <div className="card-body p-3">
-        <div className="d-flex align-items-center">
-          <div className="flex-grow-1">
-            <div className="placeholder-wave mb-2">
-              <span className="placeholder col-9" style={{ height: '14px' }}></span>
-            </div>
-            <div className="placeholder-wave">
-              <span className="placeholder col-5" style={{ height: '28px' }}></span>
-            </div>
-          </div>
-          <div className="col-auto">
-            <div className="placeholder-wave">
-              <span
-                className="placeholder rounded-circle"
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50% !important',
-                }}
-              ></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const TableRowSkeleton = () => (
-    <tr>
-      <td className="text-center">
-        <span className="placeholder col-1"></span>
-      </td>
-      <td>
-        <span className="placeholder col-8"></span>
-      </td>
-      <td>
-        <span className="placeholder col-10"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-3"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-4"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-3"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-5"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-6"></span>
-      </td>
-    </tr>
-  );
+  const handleViewDetails = (customer) => {
+    setSelectedCustomer(customer);
+    setShowDetailModal(true);
+  };
 
   const EmptyState = () => (
     <div className="text-center py-5">
@@ -372,11 +316,15 @@ const CustomerList = () => {
   );
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 admin-dashboard-container fadeIn">
+    <div className={`container-fluid px-3 pt-0 pb-2 admin-dashboard-container ${!loading ? 'fadeIn' : ''}`}>
       <ToastContainer position="top-right" autoClose={3000} />
       
-      {/* Page Header */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
+      {loading ? (
+        <LoadingSpinner text="Loading customers data..." />
+      ) : (
+        <>
+          {/* Page Header */}
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
@@ -439,45 +387,41 @@ const CustomerList = () => {
           { label: "Unverified Customers", value: stats.unverifiedCustomers, icon: "fa-user-times", color: "#ffc107" },
         ].map((stat, idx) => (
           <div className="col-6 col-md-3" key={idx}>
-            {initialLoading ? (
-              <StatsCardSkeleton />
-            ) : (
-              <div 
-                className="card stats-card h-100 shadow-sm"
-                style={{ 
-                  border: '1px solid rgba(0, 0, 0, 0.125)',
-                  borderRadius: '0.375rem'
-                }}
-              >
-                <div className="card-body p-3">
-                  <div className="d-flex align-items-center">
-                    <div className="flex-grow-1">
-                      <div
-                        className="text-xs fw-semibold text-uppercase mb-1"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.label}
-                      </div>
-                      <div
-                        className="h4 mb-0 fw-bold"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.value}
-                      </div>
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <div
+                      className="text-xs fw-semibold text-uppercase mb-1"
+                      style={{ color: stat.color }}
+                    >
+                      {stat.label}
                     </div>
-                    <div className="col-auto">
-                      <i
-                        className={`fas ${stat.icon} fa-2x`}
-                        style={{
-                          color: stat.color,
-                          opacity: 0.7,
-                        }}
-                      ></i>
+                    <div
+                      className="h4 mb-0 fw-bold"
+                      style={{ color: stat.color }}
+                    >
+                      {initialLoading ? '...' : stat.value}
                     </div>
+                  </div>
+                  <div className="col-auto">
+                    <i
+                      className={`fas ${stat.icon} fa-2x`}
+                      style={{
+                        color: stat.color,
+                        opacity: 0.7,
+                      }}
+                    ></i>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -658,40 +602,7 @@ const CustomerList = () => {
           </div>
         </div>
         <div className="card-body p-0">
-          {loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
-                <thead style={{ backgroundColor: "var(--background-light)" }}>
-                  <tr>
-                    <th className="text-center small fw-semibold" style={{ width: "4%" }}>#</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Name</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Email</th>
-                    <th className="text-center small fw-semibold" style={{ width: "10%" }}>Status</th>
-                    <th className="text-center small fw-semibold" style={{ width: "10%" }}>Verified</th>
-                    <th className="text-center small fw-semibold" style={{ width: "12%" }}>Signup Method</th>
-                    <th className="text-center small fw-semibold" style={{ width: "14%" }}>Registered</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...Array(5)].map((_, idx) => (
-                    <TableRowSkeleton key={idx} />
-                  ))}
-                </tbody>
-              </table>
-              <div className="text-center py-4">
-                <div
-                  className="spinner-border me-2"
-                  style={{ color: "var(--primary-color)" }}
-                  role="status"
-                >
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <span className="small" style={{ color: "var(--text-muted)" }}>
-                  Fetching customers data...
-                </span>
-              </div>
-            </div>
-          ) : customers.length === 0 ? (
+          {customers.length === 0 ? (
             <EmptyState />
           ) : (
             <div className="table-responsive">
@@ -699,6 +610,7 @@ const CustomerList = () => {
                 <thead style={{ backgroundColor: "var(--background-light)" }}>
                   <tr>
                     <th className="text-center small fw-semibold" style={{ width: "4%" }}>#</th>
+                    <th className="text-center small fw-semibold" style={{ width: "80px", minWidth: "80px" }}>Actions</th>
                     <th className="small fw-semibold" style={{ width: "20%" }}>Name</th>
                     <th className="small fw-semibold" style={{ width: "20%" }}>Email</th>
                     <th className="text-center small fw-semibold" style={{ width: "10%" }}>Status</th>
@@ -715,6 +627,41 @@ const CustomerList = () => {
                         style={{ color: "var(--text-primary)" }}
                       >
                         {startIndex + index + 1}
+                      </td>
+                      <td className="text-center" style={{ width: "80px", minWidth: "80px", whiteSpace: "nowrap" }}>
+                        <div className="d-flex justify-content-center">
+                          <button
+                            className="btn btn-info btn-sm text-white"
+                            onClick={() => handleViewDetails(customer)}
+                            disabled={isActionDisabled()}
+                            title="View Details"
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              borderRadius: "6px",
+                              transition: "all 0.2s ease-in-out",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!e.target.disabled) {
+                                e.target.style.transform = "translateY(-1px)";
+                                e.target.style.boxShadow =
+                                  "0 4px 8px rgba(0,0,0,0.2)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!e.target.disabled) {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }
+                            }}
+                          >
+                            <FaEye style={{ fontSize: "0.875rem" }} />
+                          </button>
+                        </div>
                       </td>
                       <td style={{ maxWidth: "200px", overflow: "hidden" }}>
                         <div
@@ -815,62 +762,231 @@ const CustomerList = () => {
           )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination - unified style (same as LandingPageSections) */}
         {!loading && customers.length > 0 && (
-          <div
-            className="card-footer border-top-0 py-2"
-            style={{ backgroundColor: "var(--background-light)" }}
-          >
+          <div className="card-footer bg-white border-top px-3 py-2">
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-              <div className="small text-muted">
-                Showing {paginationMeta.from} to {paginationMeta.to} of{" "}
-                {paginationMeta.total} customers
+              <div className="text-center text-md-start">
+                <small style={{ color: "var(--text-muted)" }}>
+                  Showing{" "}
+                  <span
+                    className="fw-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {paginationMeta.from || startIndex + 1}-
+                    {paginationMeta.to ||
+                      Math.min(
+                        startIndex + customers.length,
+                        paginationMeta.total
+                      )}
+                  </span>{" "}
+                  of{" "}
+                  <span
+                    className="fw-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {paginationMeta.total}
+                  </span>{" "}
+                  customers
+                </small>
               </div>
+
               <div className="d-flex align-items-center gap-2">
                 <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1 || loading}
+                  className="btn btn-sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
+                  disabled={
+                    paginationMeta.current_page === 1 ||
+                    loading ||
+                    isActionDisabled()
+                  }
+                  style={{
+                    transition: "all 0.2s ease-in-out",
+                    border: "2px solid var(--primary-color)",
+                    color: "var(--primary-color)",
+                    backgroundColor: "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.transform = "translateY(-1px)";
+                      e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                      e.target.style.backgroundColor = "var(--primary-color)";
+                      e.target.style.color = "white";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.backgroundColor = "transparent";
+                    e.target.style.color = "var(--primary-color)";
+                  }}
                 >
-                  <i className="fas fa-angle-double-left"></i>
+                  <i className="fas fa-chevron-left me-1"></i>
+                  Previous
                 </button>
+
+                <div className="d-none d-md-flex gap-1">
+                  {(() => {
+                    let pages = [];
+                    const maxVisiblePages = 5;
+                    const totalPages = paginationMeta.last_page;
+
+                    if (totalPages <= maxVisiblePages) {
+                      pages = Array.from(
+                        { length: totalPages },
+                        (_, i) => i + 1
+                      );
+                    } else {
+                      pages.push(1);
+                      let start = Math.max(2, paginationMeta.current_page - 1);
+                      let end = Math.min(
+                        totalPages - 1,
+                        paginationMeta.current_page + 1
+                      );
+
+                      if (paginationMeta.current_page <= 2) {
+                        end = 4;
+                      } else if (
+                        paginationMeta.current_page >=
+                        totalPages - 1
+                      ) {
+                        start = totalPages - 3;
+                      }
+
+                      if (start > 2) {
+                        pages.push("...");
+                      }
+
+                      for (let i = start; i <= end; i++) {
+                        pages.push(i);
+                      }
+
+                      if (end < totalPages - 1) {
+                        pages.push("...");
+                      }
+
+                      if (totalPages > 1) {
+                        pages.push(totalPages);
+                      }
+                    }
+
+                    return pages.map((page, index) => (
+                      <button
+                        key={index}
+                        className="btn btn-sm"
+                        onClick={() => page !== "..." && setCurrentPage(page)}
+                        disabled={page === "..." || isActionDisabled()}
+                        style={{
+                          transition: "all 0.2s ease-in-out",
+                          border: `2px solid ${
+                            paginationMeta.current_page === page
+                              ? "var(--primary-color)"
+                              : "var(--input-border)"
+                          }`,
+                          color:
+                            paginationMeta.current_page === page
+                              ? "white"
+                              : "var(--text-primary)",
+                          backgroundColor:
+                            paginationMeta.current_page === page
+                              ? "var(--primary-color)"
+                              : "transparent",
+                          minWidth: "40px",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (
+                            !e.target.disabled &&
+                            paginationMeta.current_page !== page
+                          ) {
+                            e.target.style.transform = "translateY(-1px)";
+                            e.target.style.boxShadow =
+                              "0 2px 4px rgba(0,0,0,0.1)";
+                            e.target.style.backgroundColor =
+                              "var(--primary-light)";
+                            e.target.style.color = "var(--text-primary)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (
+                            !e.target.disabled &&
+                            paginationMeta.current_page !== page
+                          ) {
+                            e.target.style.transform = "translateY(0)";
+                            e.target.style.boxShadow = "none";
+                            e.target.style.backgroundColor = "transparent";
+                            e.target.style.color = "var(--text-primary)";
+                          }
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ));
+                  })()}
+                </div>
+
+                <div className="d-md-none">
+                  <small style={{ color: "var(--text-muted)" }}>
+                    Page {paginationMeta.current_page} of{" "}
+                    {paginationMeta.last_page}
+                  </small>
+                </div>
+
                 <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1 || loading}
-                >
-                  <i className="fas fa-angle-left"></i>
-                </button>
-                <span className="small text-muted">
-                  Page {paginationMeta.current_page} of {paginationMeta.last_page}
-                </span>
-                <button
-                  className="btn btn-sm btn-outline-primary"
+                  className="btn btn-sm"
                   onClick={() =>
                     setCurrentPage((prev) =>
-                      Math.min(paginationMeta.last_page, prev + 1)
+                      Math.min(prev + 1, paginationMeta.last_page)
                     )
                   }
                   disabled={
-                    currentPage === paginationMeta.last_page || loading
+                    paginationMeta.current_page === paginationMeta.last_page ||
+                    loading ||
+                    isActionDisabled()
                   }
+                  style={{
+                    transition: "all 0.2s ease-in-out",
+                    border: "2px solid var(--primary-color)",
+                    color: "var(--primary-color)",
+                    backgroundColor: "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.transform = "translateY(-1px)";
+                      e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                      e.target.style.backgroundColor = "var(--primary-color)";
+                      e.target.style.color = "white";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.backgroundColor = "transparent";
+                    e.target.style.color = "var(--primary-color)";
+                  }}
                 >
-                  <i className="fas fa-angle-right"></i>
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage(paginationMeta.last_page)}
-                  disabled={
-                    currentPage === paginationMeta.last_page || loading
-                  }
-                >
-                  <i className="fas fa-angle-double-right"></i>
+                  Next
+                  <i className="fas fa-chevron-right ms-1"></i>
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Customer Details Modal */}
+      {selectedCustomer && showDetailModal && (
+        <CustomerDetailsModal
+          customer={selectedCustomer}
+          onClose={() => {
+            setShowDetailModal(false);
+            setTimeout(() => setSelectedCustomer(null), 250);
+          }}
+        />
+      )}
+        </>
+      )}
     </div>
   );
 };

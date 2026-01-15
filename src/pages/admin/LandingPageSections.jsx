@@ -12,6 +12,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import LandingPageSectionFormModal from './LandingPageSectionFormModal';
 import LandingPageSectionDetailsModal from './LandingPageSectionDetailsModal';
 import { FaLayerGroup, FaEdit, FaTrash, FaBox } from 'react-icons/fa';
+import LoadingSpinner from '../../components/admin/LoadingSpinner';
 
 const LandingPageSections = () => {
   const { token } = useAuth();
@@ -566,8 +567,12 @@ const LandingPageSections = () => {
   };
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 inventory-categories-container fadeIn">
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
+    <div className={`container-fluid px-3 pt-0 pb-2 inventory-categories-container ${!loading ? 'fadeIn' : ''}`}>
+      {loading ? (
+        <LoadingSpinner text="Loading sections data..." />
+      ) : (
+        <>
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
@@ -636,64 +641,80 @@ const LandingPageSections = () => {
       </div>
 
       <div className="row g-3 mb-4">
-        {[stats.totalSections, stats.activeSections].map((value, idx) => (
-          <div className="col-6 col-md-3" key={idx}>
-            {initialLoading ? (
-              <StatsCardSkeleton />
-            ) : (
-              <div 
-                className="card stats-card h-100 shadow-sm"
-                style={{ 
-                  border: '1px solid rgba(0, 0, 0, 0.125)',
-                  borderRadius: '0.375rem'
-                }}
-              >
-                <div className="card-body p-3">
-                  <div className="d-flex align-items-center">
-                    <div className="flex-grow-1">
-                      <div
-                        className="text-xs fw-semibold text-uppercase mb-1"
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-color)"
-                              : "var(--accent-color)",
-                        }}
-                      >
-                        {idx === 0 ? "Total Sections" : "Active Sections"}
-                      </div>
-                      <div
-                        className="h4 mb-0 fw-bold"
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-color)"
-                              : "var(--accent-color)",
-                        }}
-                      >
-                        {value}
-                      </div>
-                    </div>
-                    <div className="col-auto">
-                      <i
-                        className={`fas ${
-                          idx === 0 ? "fa-layer-group" : "fa-check-circle"
-                        } fa-2x`}
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-light)"
-                              : "var(--accent-light)",
-                          opacity: 0.7,
-                        }}
-                      ></i>
-                    </div>
+        <div className="col-6 col-md-3">
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: "var(--primary-color)" }}
+                  >
+                    Total Sections
+                  </div>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: "var(--primary-color)" }}
+                  >
+                    {initialLoading ? '...' : stats.totalSections}
                   </div>
                 </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-layer-group fa-2x"
+                    style={{
+                      color: "var(--primary-light)",
+                      opacity: 0.7,
+                    }}
+                  ></i>
+                </div>
               </div>
-            )}
+            </div>
           </div>
-        ))}
+        </div>
+        <div className="col-6 col-md-3">
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: "var(--accent-color)" }}
+                  >
+                    Active Sections
+                  </div>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: "var(--accent-color)" }}
+                  >
+                    {initialLoading ? '...' : stats.activeSections}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-check-circle fa-2x"
+                    style={{
+                      color: "var(--accent-light)",
+                      opacity: 0.7,
+                    }}
+                  ></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div
@@ -849,66 +870,7 @@ const LandingPageSections = () => {
           </div>
         </div>
         <div className="card-body p-0">
-          {loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
-                <thead style={{ backgroundColor: "var(--background-light)" }}>
-                  <tr>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "4%" }}
-                    >
-                      #
-                    </th>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "10%" }}
-                    >
-                      Actions
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "30%" }}>
-                      Title
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "25%" }}
-                    >
-                      Products
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Style
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...Array(5)].map((_, idx) => (
-                    <TableRowSkeleton key={idx} />
-                  ))}
-                </tbody>
-              </table>
-              <div className="text-center py-4">
-                <div
-                  className="spinner-border me-2"
-                  style={{ color: "var(--primary-color)" }}
-                  role="status"
-                >
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <span className="small" style={{ color: "var(--text-muted)" }}>
-                  Fetching sections data...
-                </span>
-              </div>
-            </div>
-          ) : sections.length === 0 ? (
+          {sections.length === 0 ? (
             <EmptyState
               onAddSection={handleNewSection}
               isActionDisabled={isActionDisabled}
@@ -927,7 +889,7 @@ const LandingPageSections = () => {
                     </th>
                     <th
                       className="text-center small fw-semibold"
-                      style={{ width: "10%" }}
+                      style={{ width: "120px", minWidth: "120px" }}
                     >
                       Actions
                     </th>
@@ -965,7 +927,7 @@ const LandingPageSections = () => {
                         >
                           {startIndex + index + 1}
                         </td>
-                        <td className="text-center">
+                        <td className="text-center" style={{ width: "120px", minWidth: "120px", whiteSpace: "nowrap" }}>
                           <div className="d-flex justify-content-center gap-1">
                             <button
                               className="btn btn-info btn-sm text-white"
@@ -990,8 +952,10 @@ const LandingPageSections = () => {
                                 }
                               }}
                               onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(0)";
+                                  e.target.style.boxShadow = "none";
+                                }
                               }}
                             >
                               <FaBox style={{ fontSize: "0.875rem" }} />
@@ -1019,8 +983,10 @@ const LandingPageSections = () => {
                                 }
                               }}
                               onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(0)";
+                                  e.target.style.boxShadow = "none";
+                                }
                               }}
                             >
                               {actionLoading === section.id ? (
@@ -1055,8 +1021,10 @@ const LandingPageSections = () => {
                                 }
                               }}
                               onMouseLeave={(e) => {
-                                e.target.style.transform = "translateY(0)";
-                                e.target.style.boxShadow = "none";
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(0)";
+                                  e.target.style.boxShadow = "none";
+                                }
                               }}
                             >
                               {actionLoading === section.id ? (
@@ -1380,101 +1348,11 @@ const LandingPageSections = () => {
           />
         </div>
       </Portal>
+        </>
+      )}
     </div>
   );
 };
-
-const StatsCardSkeleton = () => (
-  <div 
-    className="card stats-card h-100 shadow-sm"
-    style={{ 
-      border: '1px solid rgba(0, 0, 0, 0.125)',
-      borderRadius: '0.375rem'
-    }}
-  >
-    <div className="card-body p-3">
-      <div className="d-flex align-items-center">
-        <div className="flex-grow-1">
-          <div className="text-xs fw-semibold text-uppercase mb-1 placeholder-wave">
-            <span className="placeholder col-7" style={{ height: 14 }}></span>
-          </div>
-          <div className="h4 mb-0 fw-bold placeholder-wave">
-            <span className="placeholder col-4" style={{ height: 28 }}></span>
-          </div>
-        </div>
-        <div className="col-auto">
-          <div className="placeholder-wave">
-            <span
-              className="placeholder rounded-circle"
-              style={{ width: 48, height: 48, borderRadius: "50% !important" }}
-            ></span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const TableRowSkeleton = () => (
-  <tr className="align-middle" style={{ height: "70px" }}>
-    <td className="text-center">
-      <div className="placeholder-wave">
-        <span className="placeholder col-4" style={{ height: "20px" }}></span>
-      </div>
-    </td>
-    <td className="text-center">
-      <div className="d-flex justify-content-center gap-1">
-        {[1, 2, 3].map((item) => (
-          <div
-            key={item}
-            className="placeholder action-placeholder"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-            }}
-          ></div>
-        ))}
-      </div>
-    </td>
-    <td>
-      <div className="d-flex align-items-center">
-        <div className="flex-grow-1">
-          <div className="placeholder-wave mb-1">
-            <span
-              className="placeholder col-8"
-              style={{ height: "16px" }}
-            ></span>
-          </div>
-          <div className="placeholder-wave">
-            <span
-              className="placeholder col-6"
-              style={{ height: "14px" }}
-            ></span>
-          </div>
-        </div>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave mb-1">
-        <span className="placeholder col-10" style={{ height: "16px" }}></span>
-      </div>
-      <div className="placeholder-wave">
-        <span className="placeholder col-8" style={{ height: "14px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-6" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-8" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-  </tr>
-);
 
 const EmptyState = ({ onAddSection, isActionDisabled, hasFilters }) => (
   <div className="text-center py-5">

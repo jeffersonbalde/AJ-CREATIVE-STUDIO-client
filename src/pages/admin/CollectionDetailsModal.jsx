@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Portal from "../../components/Portal";
 import { FaBox, FaLayerGroup, FaCheckCircle, FaTimesCircle, FaCalendarAlt } from "react-icons/fa";
+import LoadingSpinner from "../../components/admin/LoadingSpinner";
 
 const CollectionDetailsModal = ({ 
   collection, 
@@ -179,11 +180,7 @@ const CollectionDetailsModal = ({
             
             <div className="modal-body bg-light modal-smooth" style={{ maxHeight: "70vh", overflowY: "auto" }}>
               {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                </div>
+                <LoadingSpinner text="Loading collection details..." />
               ) : (
                 <>
                   {/* Collection Header Card */}

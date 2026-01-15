@@ -12,6 +12,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Swal from 'sweetalert2';
 import { FaTags } from 'react-icons/fa';
+import LoadingSpinner from '../../components/admin/LoadingSpinner';
 
 const DEFAULT_CATEGORY_FORM = {
   name: "",
@@ -341,7 +342,11 @@ const ProductCategories = () => {
   }, [paginationMeta, itemsPerPage]);
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 inventory-categories-container fadeIn">
+    <div className={`container-fluid px-3 pt-0 pb-2 inventory-categories-container ${!loading ? 'fadeIn' : ''}`}>
+      {loading ? (
+        <LoadingSpinner text="Loading categories data..." />
+      ) : (
+        <>
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
@@ -413,60 +418,56 @@ const ProductCategories = () => {
       <div className="row g-3 mb-4">
         {[stats.totalCategories, stats.totalItems].map((value, idx) => (
           <div className="col-6 col-md-3" key={idx}>
-            {initialLoading ? (
-              <StatsCardSkeleton />
-            ) : (
-              <div 
-                className="card stats-card h-100 shadow-sm"
-                style={{ 
-                  border: '1px solid rgba(0, 0, 0, 0.125)',
-                  borderRadius: '0.375rem'
-                }}
-              >
-                <div className="card-body p-3">
-                  <div className="d-flex align-items-center">
-                    <div className="flex-grow-1">
-                      <div
-                        className="text-xs fw-semibold text-uppercase mb-1"
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-color)"
-                              : "var(--accent-color)",
-                        }}
-                      >
-                        {idx === 0 ? "Total Categories" : "Items Tagged"}
-                      </div>
-                      <div
-                        className="h4 mb-0 fw-bold"
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-color)"
-                              : "var(--accent-color)",
-                        }}
-                      >
-                        {value}
-                      </div>
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <div
+                      className="text-xs fw-semibold text-uppercase mb-1"
+                      style={{
+                        color:
+                          idx === 0
+                            ? "var(--primary-color)"
+                            : "var(--accent-color)",
+                      }}
+                    >
+                      {idx === 0 ? "Total Categories" : "Items Tagged"}
                     </div>
-                    <div className="col-auto">
-                      <i
-                        className={`fas ${
-                          idx === 0 ? "fa-layer-group" : "fa-boxes-stacked"
-                        } fa-2x`}
-                        style={{
-                          color:
-                            idx === 0
-                              ? "var(--primary-light)"
-                              : "var(--accent-light)",
-                          opacity: 0.7,
-                        }}
-                      ></i>
+                    <div
+                      className="h4 mb-0 fw-bold"
+                      style={{
+                        color:
+                          idx === 0
+                            ? "var(--primary-color)"
+                            : "var(--accent-color)",
+                      }}
+                    >
+                      {value}
                     </div>
+                  </div>
+                  <div className="col-auto">
+                    <i
+                      className={`fas ${
+                        idx === 0 ? "fa-layer-group" : "fa-boxes-stacked"
+                      } fa-2x`}
+                      style={{
+                        color:
+                          idx === 0
+                            ? "var(--primary-light)"
+                            : "var(--accent-light)",
+                        opacity: 0.7,
+                      }}
+                    ></i>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -599,61 +600,7 @@ const ProductCategories = () => {
           </div>
         </div>
         <div className="card-body p-0">
-          {loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
-                <thead style={{ backgroundColor: "var(--background-light)" }}>
-                  <tr>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "4%" }}
-                    >
-                      #
-                    </th>
-                    <th
-                      className="text-center small fw-semibold"
-                      style={{ width: "10%" }}
-                    >
-                      Actions
-                    </th>
-                    <th className="small fw-semibold" style={{ width: "30%" }}>
-                      Category
-                    </th>
-                    <th className="small fw-semibold">Description</th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Items Tagged
-                    </th>
-                    <th
-                      className="small fw-semibold text-center"
-                      style={{ width: "14%" }}
-                    >
-                      Created
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...Array(5)].map((_, idx) => (
-                    <TableRowSkeleton key={idx} />
-                  ))}
-                </tbody>
-              </table>
-              <div className="text-center py-4">
-                <div
-                  className="spinner-border me-2"
-                  style={{ color: "var(--primary-color)" }}
-                  role="status"
-                >
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <span className="small" style={{ color: "var(--text-muted)" }}>
-                  Fetching categories data...
-                </span>
-              </div>
-            </div>
-          ) : categories.length === 0 ? (
+          {categories.length === 0 ? (
             <EmptyState
               onAddCategory={handleAddCategory}
               isActionDisabled={isActionDisabled}
@@ -1098,101 +1045,11 @@ const ProductCategories = () => {
           />
         </div>
       </Portal>
+        </>
+      )}
     </div>
   );
 };
-
-const StatsCardSkeleton = () => (
-  <div 
-    className="card stats-card h-100 shadow-sm"
-    style={{ 
-      border: '1px solid rgba(0, 0, 0, 0.125)',
-      borderRadius: '0.375rem'
-    }}
-  >
-    <div className="card-body p-3">
-      <div className="d-flex align-items-center">
-        <div className="flex-grow-1">
-          <div className="text-xs fw-semibold text-uppercase mb-1 placeholder-wave">
-            <span className="placeholder col-7" style={{ height: 14 }}></span>
-          </div>
-          <div className="h4 mb-0 fw-bold placeholder-wave">
-            <span className="placeholder col-4" style={{ height: 28 }}></span>
-          </div>
-        </div>
-        <div className="col-auto">
-          <div className="placeholder-wave">
-            <span
-              className="placeholder rounded-circle"
-              style={{ width: 48, height: 48, borderRadius: "50% !important" }}
-            ></span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const TableRowSkeleton = () => (
-  <tr className="align-middle" style={{ height: "70px" }}>
-    <td className="text-center">
-      <div className="placeholder-wave">
-        <span className="placeholder col-4" style={{ height: "20px" }}></span>
-      </div>
-    </td>
-    <td className="text-center">
-      <div className="d-flex justify-content-center gap-1">
-        {[1, 2].map((item) => (
-          <div
-            key={item}
-            className="placeholder action-placeholder"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-            }}
-          ></div>
-        ))}
-      </div>
-    </td>
-    <td>
-      <div className="d-flex align-items-center">
-        <div className="flex-grow-1">
-          <div className="placeholder-wave mb-1">
-            <span
-              className="placeholder col-8"
-              style={{ height: "16px" }}
-            ></span>
-          </div>
-          <div className="placeholder-wave">
-            <span
-              className="placeholder col-6"
-              style={{ height: "14px" }}
-            ></span>
-          </div>
-        </div>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave mb-1">
-        <span className="placeholder col-10" style={{ height: "16px" }}></span>
-      </div>
-      <div className="placeholder-wave">
-        <span className="placeholder col-8" style={{ height: "14px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-6" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-    <td>
-      <div className="placeholder-wave">
-        <span className="placeholder col-8" style={{ height: "16px" }}></span>
-      </div>
-    </td>
-  </tr>
-);
 
 const EmptyState = ({ onAddCategory, isActionDisabled }) => (
   <div className="text-center py-5">

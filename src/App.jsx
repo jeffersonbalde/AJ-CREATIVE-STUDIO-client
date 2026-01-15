@@ -21,6 +21,7 @@ import ProductCollections from './pages/admin/ProductCollections';
 import LandingPageSections from './pages/admin/LandingPageSections';
 import CustomerList from './pages/admin/CustomerList';
 import TimeLogging from './pages/admin/TimeLogging';
+import OrderList from './pages/admin/OrderList';
 import SidebarLayout from './layout/SidebarLayout';
 import { CartProvider } from './contexts/CartContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -95,6 +96,14 @@ const AppContent = () => {
               element={
                 <ProtectedRoute>
                   <SidebarLayout><AdminDashboard /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/orders"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><OrderList /></SidebarLayout>
                 </ProtectedRoute>
               }
             />

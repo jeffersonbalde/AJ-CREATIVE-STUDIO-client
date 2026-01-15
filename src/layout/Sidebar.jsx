@@ -91,6 +91,16 @@ const Sidebar = ({ onCloseSidebar }) => {
       ],
     },
     {
+      heading: "Sales & Orders",
+      items: [
+        {
+          icon: "fas fa-file-invoice",
+          label: "Orders",
+          href: "/admin/orders",
+        },
+      ],
+    },
+    {
       heading: "Product Management",
       items: [
             {

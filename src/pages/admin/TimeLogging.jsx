@@ -3,12 +3,15 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
 } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { showAlert } from "../../services/notificationService";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { FaClock, FaSignInAlt, FaSignOutAlt, FaUser, FaFilter } from 'react-icons/fa';
+import { FaClock, FaSignInAlt, FaSignOutAlt, FaUser, FaFilter, FaEye } from 'react-icons/fa';
+import LoadingSpinner from '../../components/admin/LoadingSpinner';
+import TimeLogDetailsModal from './TimeLogDetailsModal';
 
 const TimeLogging = () => {
   const { token } = useAuth();
@@ -38,6 +41,8 @@ const TimeLogging = () => {
     loginLogs: 0,
     logoutLogs: 0,
   });
+  const [selectedTimeLog, setSelectedTimeLog] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -62,12 +67,21 @@ const TimeLogging = () => {
     }
   }, [token, apiBaseUrl]);
 
-  // Fetch all time logs
-  const fetchAllTimeLogs = useCallback(async () => {
+  // Fetch time logs ONCE (all data), filtering + pagination are handled client-side
+  const fetchTimeLogs = useCallback(async (isInitial = false) => {
     setLoading(true);
-    setInitialLoading(true);
+    if (isInitial) {
+      setInitialLoading(true);
+    }
     try {
-      const response = await fetch(`${apiBaseUrl}/customer-time-logs?per_page=1000`, {
+      // Build query parameters: fetch a large page once, no filters
+      const params = new URLSearchParams();
+      params.append('per_page', '1000');
+      params.append('page', '1');
+      params.append('sort_by', 'logged_at');
+      params.append('sort_order', 'desc');
+
+      const response = await fetch(`${apiBaseUrl}/customer-time-logs?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -96,13 +110,15 @@ const TimeLogging = () => {
       }
 
       if (data.success && data.time_logs) {
-        setAllTimeLogs(data.time_logs);
-        
-        // Calculate stats
-        const loginCount = data.time_logs.filter(log => log.action === 'login').length;
-        const logoutCount = data.time_logs.filter(log => log.action === 'logout').length;
+        // Store all logs for client-side filtering
+        const logs = data.time_logs;
+        setAllTimeLogs(logs);
+
+        // Stats based on all logs
+        const loginCount = logs.filter(log => log.action === 'login').length;
+        const logoutCount = logs.filter(log => log.action === 'logout').length;
         setStats({
-          totalLogs: data.time_logs.length,
+          totalLogs: logs.length,
           loginLogs: loginCount,
           logoutLogs: logoutCount,
         });
@@ -114,13 +130,28 @@ const TimeLogging = () => {
           logoutLogs: 0,
         });
       }
+
+      // Reset visible logs & pagination; actual filtering done in filterAndPaginateTimeLogs
+      setTimeLogs([]);
+      setPaginationMeta({
+        current_page: 1,
+        last_page: 1,
+        total: 0,
+        from: 0,
+        to: 0,
+      });
     } catch (error) {
       console.error("Error fetching time logs:", error);
-      showAlert.error(
-        "Time Logs Error",
-        error.message || "Unable to load time logs"
-      );
+      toast.error(error.message || "Unable to load time logs");
+      setTimeLogs([]);
       setAllTimeLogs([]);
+      setPaginationMeta({
+        current_page: 1,
+        last_page: 1,
+        total: 0,
+        from: 0,
+        to: 0,
+      });
       setStats({
         totalLogs: 0,
         loginLogs: 0,
@@ -128,82 +159,21 @@ const TimeLogging = () => {
       });
     } finally {
       setLoading(false);
-      setInitialLoading(false);
+      if (isInitial) {
+        setInitialLoading(false);
+      }
     }
   }, [token, apiBaseUrl]);
 
-  // Filter and paginate time logs client-side
-  const filterAndPaginateTimeLogs = useCallback(() => {
-    let filtered = [...allTimeLogs];
-
-    // Apply search filter
-    if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter((log) => {
-        const nameMatch = log.customer_name?.toLowerCase().includes(search);
-        const emailMatch = log.customer_email?.toLowerCase().includes(search);
-        return nameMatch || emailMatch;
-      });
-    }
-
-    // Apply action filter
-    if (actionFilter) {
-      filtered = filtered.filter(log => log.action === actionFilter);
-    }
-
-    // Apply customer filter
-    if (customerFilter) {
-      filtered = filtered.filter(log => log.customer_id === parseInt(customerFilter));
-    }
-
-    // Apply date filters
-    if (dateFrom) {
-      filtered = filtered.filter(log => {
-        const logDate = new Date(log.logged_at);
-        return logDate >= new Date(dateFrom);
-      });
-    }
-    if (dateTo) {
-      filtered = filtered.filter(log => {
-        const logDate = new Date(log.logged_at);
-        const toDate = new Date(dateTo);
-        toDate.setHours(23, 59, 59, 999); // Include entire day
-        return logDate <= toDate;
-      });
-    }
-
-    // Calculate pagination
-    const total = filtered.length;
-    const lastPage = Math.max(1, Math.ceil(total / itemsPerPage));
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginated = filtered.slice(startIndex, endIndex);
-
-    // Update displayed time logs
-    setTimeLogs(paginated);
-    
-    // Update pagination meta
-    setPaginationMeta({
-      current_page: currentPage,
-      last_page: lastPage,
-      total: total,
-      from: total > 0 ? startIndex + 1 : 0,
-      to: Math.min(endIndex, total),
-    });
-  }, [allTimeLogs, searchTerm, actionFilter, customerFilter, dateFrom, dateTo, currentPage, itemsPerPage]);
-
-  // Fetch all time logs on mount
+  // Fetch customers on mount
   useEffect(() => {
-    fetchAllTimeLogs();
     fetchCustomers();
-  }, [fetchAllTimeLogs, fetchCustomers]);
+  }, [fetchCustomers]);
 
-  // Filter and paginate when filters change
+  // Fetch ALL time logs once on mount (or when token/base URL changes)
   useEffect(() => {
-    if (!initialLoading) {
-      filterAndPaginateTimeLogs();
-    }
-  }, [filterAndPaginateTimeLogs, initialLoading]);
+    fetchTimeLogs(true);
+  }, [fetchTimeLogs]);
 
   // Ensure toast container has highest z-index above modals
   useEffect(() => {
@@ -257,6 +227,80 @@ const TimeLogging = () => {
     return (paginationMeta.current_page - 1) * itemsPerPage;
   }, [paginationMeta, itemsPerPage]);
 
+  // Client-side filter + pagination (similar to CustomerList)
+  const filterAndPaginateTimeLogs = useCallback(() => {
+    let filtered = [...allTimeLogs];
+
+    // Search by customer name or email
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter((log) => {
+        const nameMatch = log.customer_name?.toLowerCase().includes(search);
+        const emailMatch = log.customer_email?.toLowerCase().includes(search);
+        return nameMatch || emailMatch;
+      });
+    }
+
+    // Filter by action
+    if (actionFilter) {
+      filtered = filtered.filter(log => log.action === actionFilter);
+    }
+
+    // Filter by customer
+    if (customerFilter) {
+      filtered = filtered.filter(log => {
+        if (log.customer_id == null) return false;
+        return String(log.customer_id) === String(customerFilter);
+      });
+    }
+
+    // Filter by date range (using logged_at)
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      filtered = filtered.filter(log => {
+        if (!log.logged_at) return false;
+        const logDate = new Date(log.logged_at);
+        // Compare by date only
+        return logDate >= fromDate;
+      });
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      // Include entire end day
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(log => {
+        if (!log.logged_at) return false;
+        const logDate = new Date(log.logged_at);
+        return logDate <= toDate;
+      });
+    }
+
+    // Calculate pagination
+    const total = filtered.length;
+    const lastPage = Math.max(1, Math.ceil(total / itemsPerPage));
+    const current = Math.min(currentPage, lastPage);
+    const start = (current - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const paginated = filtered.slice(start, end);
+
+    setTimeLogs(paginated);
+    setPaginationMeta({
+      current_page: current,
+      last_page: lastPage,
+      total,
+      from: total > 0 ? start + 1 : 0,
+      to: Math.min(end, total),
+    });
+  }, [allTimeLogs, searchTerm, actionFilter, customerFilter, dateFrom, dateTo, currentPage, itemsPerPage]);
+
+  // Re-run client-side filtering whenever data or filters change
+  useEffect(() => {
+    if (!initialLoading) {
+      filterAndPaginateTimeLogs();
+    }
+  }, [filterAndPaginateTimeLogs, initialLoading]);
+
   const formatDateTime = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -281,67 +325,11 @@ const TimeLogging = () => {
     });
   };
 
-  // Skeleton loaders
-  const StatsCardSkeleton = () => (
-    <div 
-      className="card stats-card h-100 shadow-sm"
-      style={{ 
-        border: '1px solid rgba(0, 0, 0, 0.125)',
-        borderRadius: '0.375rem'
-      }}
-    >
-      <div className="card-body p-3">
-        <div className="d-flex align-items-center">
-          <div className="flex-grow-1">
-            <div className="placeholder-wave mb-2">
-              <span className="placeholder col-9" style={{ height: '14px' }}></span>
-            </div>
-            <div className="placeholder-wave">
-              <span className="placeholder col-5" style={{ height: '28px' }}></span>
-            </div>
-          </div>
-          <div className="col-auto">
-            <div className="placeholder-wave">
-              <span
-                className="placeholder rounded-circle"
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50% !important',
-                }}
-              ></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const TableRowSkeleton = () => (
-    <tr>
-      <td className="text-center">
-        <span className="placeholder col-1"></span>
-      </td>
-      <td>
-        <span className="placeholder col-8"></span>
-      </td>
-      <td>
-        <span className="placeholder col-6"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-3"></span>
-      </td>
-      <td>
-        <span className="placeholder col-10"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-8"></span>
-      </td>
-      <td className="text-center">
-        <span className="placeholder col-6"></span>
-      </td>
-    </tr>
-  );
+  const handleViewDetails = (timeLog) => {
+    setSelectedTimeLog(timeLog);
+    setShowDetailModal(true);
+  };
 
   const EmptyState = () => (
     <div className="text-center py-5">
@@ -370,11 +358,15 @@ const TimeLogging = () => {
   );
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 admin-dashboard-container fadeIn">
+    <div className={`container-fluid px-3 pt-0 pb-2 admin-dashboard-container ${!loading ? 'fadeIn' : ''}`}>
       <ToastContainer position="top-right" autoClose={3000} />
       
-      {/* Page Header */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
+      {loading ? (
+        <LoadingSpinner text="Loading time logs data..." />
+      ) : (
+        <>
+          {/* Page Header */}
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
@@ -397,7 +389,10 @@ const TimeLogging = () => {
           </div>
           <button
             className="btn btn-sm"
-            onClick={fetchAllTimeLogs}
+            onClick={() => {
+              setCurrentPage(1);
+              fetchTimeLogs(false);
+            }}
             disabled={loading || isActionDisabled()}
             style={{
               transition: "all 0.2s ease-in-out",
@@ -436,45 +431,41 @@ const TimeLogging = () => {
           { label: "Logout Logs", value: stats.logoutLogs, icon: "fa-sign-out-alt", color: "#dc3545" },
         ].map((stat, idx) => (
           <div className="col-6 col-md-4" key={idx}>
-            {initialLoading ? (
-              <StatsCardSkeleton />
-            ) : (
-              <div 
-                className="card stats-card h-100 shadow-sm"
-                style={{ 
-                  border: '1px solid rgba(0, 0, 0, 0.125)',
-                  borderRadius: '0.375rem'
-                }}
-              >
-                <div className="card-body p-3">
-                  <div className="d-flex align-items-center">
-                    <div className="flex-grow-1">
-                      <div
-                        className="text-xs fw-semibold text-uppercase mb-1"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.label}
-                      </div>
-                      <div
-                        className="h4 mb-0 fw-bold"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.value}
-                      </div>
+            <div 
+              className="card stats-card h-100 shadow-sm"
+              style={{ 
+                border: '1px solid rgba(0, 0, 0, 0.125)',
+                borderRadius: '0.375rem'
+              }}
+            >
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <div
+                      className="text-xs fw-semibold text-uppercase mb-1"
+                      style={{ color: stat.color }}
+                    >
+                      {stat.label}
                     </div>
-                    <div className="col-auto">
-                      <i
-                        className={`fas ${stat.icon} fa-2x`}
-                        style={{
-                          color: stat.color,
-                          opacity: 0.7,
-                        }}
-                      ></i>
+                    <div
+                      className="h4 mb-0 fw-bold"
+                      style={{ color: stat.color }}
+                    >
+                      {initialLoading ? '...' : stat.value}
                     </div>
+                  </div>
+                  <div className="col-auto">
+                    <i
+                      className={`fas ${stat.icon} fa-2x`}
+                      style={{
+                        color: stat.color,
+                        opacity: 0.7,
+                      }}
+                    ></i>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -706,65 +697,78 @@ const TimeLogging = () => {
           </div>
         </div>
         <div className="card-body p-0">
-          {loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
-                <thead style={{ backgroundColor: "var(--background-light)" }}>
-                  <tr>
-                    <th className="text-center small fw-semibold" style={{ width: "4%" }}>#</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Customer</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Email</th>
-                    <th className="text-center small fw-semibold" style={{ width: "10%" }}>Action</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Date & Time</th>
-                    <th className="text-center small fw-semibold" style={{ width: "13%" }}>IP Address</th>
-                    <th className="text-center small fw-semibold" style={{ width: "13%" }}>User Agent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...Array(5)].map((_, idx) => (
-                    <TableRowSkeleton key={idx} />
-                  ))}
-                </tbody>
-              </table>
-              <div className="text-center py-4">
-                <div
-                  className="spinner-border me-2"
-                  style={{ color: "var(--primary-color)" }}
-                  role="status"
-                >
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <span className="small" style={{ color: "var(--text-muted)" }}>
-                  Fetching time logs data...
-                </span>
-              </div>
-            </div>
-          ) : timeLogs.length === 0 ? (
+          {timeLogs.length === 0 ? (
             <EmptyState />
           ) : (
-            <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">
+            <div className="table-responsive" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table className="table table-striped table-hover mb-0" style={{ minWidth: '800px', tableLayout: 'fixed', width: '100%' }}>
                 <thead style={{ backgroundColor: "var(--background-light)" }}>
                   <tr>
-                    <th className="text-center small fw-semibold" style={{ width: "4%" }}>#</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Customer</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Email</th>
-                    <th className="text-center small fw-semibold" style={{ width: "10%" }}>Action</th>
-                    <th className="small fw-semibold" style={{ width: "20%" }}>Date & Time</th>
-                    <th className="text-center small fw-semibold" style={{ width: "13%" }}>IP Address</th>
-                    <th className="text-center small fw-semibold" style={{ width: "13%" }}>User Agent</th>
+                    <th className="text-center small fw-semibold" style={{ width: "40px", minWidth: "40px" }}>#</th>
+                    <th className="text-center small fw-semibold" style={{ width: "80px", minWidth: "80px" }}>Actions</th>
+                    <th className="small fw-semibold" style={{ width: "120px", minWidth: "120px" }}>Customer</th>
+                    <th className="small fw-semibold" style={{ width: "150px", minWidth: "150px" }}>Email</th>
+                    <th className="text-center small fw-semibold" style={{ width: "80px", minWidth: "80px" }}>Action</th>
+                    <th className="small fw-semibold" style={{ width: "160px", minWidth: "160px" }}>Date & Time</th>
+                    <th className="text-center small fw-semibold" style={{ width: "120px", minWidth: "120px" }}>IP Address</th>
+                    <th className="text-center small fw-semibold" style={{ width: "130px", minWidth: "130px" }}>User Agent</th>
                   </tr>
                 </thead>
                 <tbody>
                   {timeLogs.map((log, index) => (
-                    <tr key={log.id} className="align-middle">
+                    <tr key={log.id} className="align-middle" style={{ height: '48px', whiteSpace: 'nowrap' }}>
                       <td
                         className="text-center fw-bold"
-                        style={{ color: "var(--text-primary)" }}
+                        style={{ 
+                          color: "var(--text-primary)",
+                          width: "40px",
+                          minWidth: "40px",
+                          whiteSpace: "nowrap"
+                        }}
                       >
                         {startIndex + index + 1}
                       </td>
-                      <td style={{ maxWidth: "200px", overflow: "hidden" }}>
+                      <td className="text-center" style={{ width: "80px", minWidth: "80px", whiteSpace: "nowrap" }}>
+                        <div className="d-flex justify-content-center">
+                          <button
+                            className="btn btn-info btn-sm text-white"
+                            onClick={() => handleViewDetails(log)}
+                            disabled={isActionDisabled()}
+                            title="View Details"
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              borderRadius: "6px",
+                              transition: "all 0.2s ease-in-out",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!e.target.disabled) {
+                                e.target.style.transform = "translateY(-1px)";
+                                e.target.style.boxShadow =
+                                  "0 4px 8px rgba(0,0,0,0.2)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!e.target.disabled) {
+                                e.target.style.transform = "translateY(0)";
+                                e.target.style.boxShadow = "none";
+                              }
+                            }}
+                          >
+                            <FaEye style={{ fontSize: "0.875rem" }} />
+                          </button>
+                        </div>
+                      </td>
+                      <td style={{ 
+                        width: "120px",
+                        minWidth: "120px",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap"
+                      }}>
                         <div
                           className="fw-medium"
                           style={{
@@ -772,13 +776,19 @@ const TimeLogging = () => {
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
+                            fontSize: "0.875rem"
                           }}
                           title={log.customer_name}
                         >
                           {log.customer_name || 'N/A'}
                         </div>
                       </td>
-                      <td style={{ maxWidth: "200px", overflow: "hidden" }}>
+                      <td style={{ 
+                        width: "150px",
+                        minWidth: "150px",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap"
+                      }}>
                         <div
                           className="small"
                           style={{
@@ -786,33 +796,79 @@ const TimeLogging = () => {
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
+                            fontSize: "0.8rem"
                           }}
                           title={log.customer_email}
                         >
                           {log.customer_email || 'N/A'}
                         </div>
                       </td>
-                      <td className="text-center">
+                      <td className="text-center" style={{ width: "80px", minWidth: "80px", whiteSpace: "nowrap" }}>
                         {log.action === 'login' ? (
-                          <span className="badge bg-success">
-                            <FaSignInAlt className="me-1" />
+                          <span className="badge bg-success" style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", whiteSpace: "nowrap" }}>
+                            <FaSignInAlt className="me-1" style={{ fontSize: "0.7rem" }} />
                             Login
                           </span>
                         ) : (
-                          <span className="badge bg-danger">
-                            <FaSignOutAlt className="me-1" />
+                          <span className="badge bg-danger" style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", whiteSpace: "nowrap" }}>
+                            <FaSignOutAlt className="me-1" style={{ fontSize: "0.7rem" }} />
                             Logout
                           </span>
                         )}
                       </td>
-                      <td className="text-muted small">
-                        {log.logged_at ? formatDateTime(log.logged_at) : 'N/A'}
+                      <td className="text-muted small" style={{ 
+                        width: "160px",
+                        minWidth: "160px",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap"
+                      }}>
+                        <div
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontSize: "0.8rem"
+                          }}
+                          title={log.logged_at ? formatDateTime(log.logged_at) : 'N/A'}
+                        >
+                          {log.logged_at ? formatDateTime(log.logged_at) : 'N/A'}
+                        </div>
                       </td>
-                      <td className="text-center text-muted small">
-                        {log.ip_address || 'N/A'}
+                      <td className="text-center text-muted small" style={{ 
+                        width: "120px",
+                        minWidth: "120px",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap"
+                      }}>
+                        <div
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontSize: "0.8rem"
+                          }}
+                          title={log.ip_address || 'N/A'}
+                        >
+                          {log.ip_address || 'N/A'}
+                        </div>
                       </td>
-                      <td className="text-center text-muted small" style={{ maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis" }} title={log.user_agent || 'N/A'}>
-                        {log.user_agent ? (log.user_agent.length > 30 ? log.user_agent.substring(0, 30) + '...' : log.user_agent) : 'N/A'}
+                      <td className="text-center text-muted small" style={{ 
+                        width: "130px",
+                        minWidth: "130px",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap"
+                      }}>
+                        <div
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontSize: "0.75rem"
+                          }}
+                          title={log.user_agent || 'N/A'}
+                        >
+                          {log.user_agent ? (log.user_agent.length > 25 ? log.user_agent.substring(0, 25) + '...' : log.user_agent) : 'N/A'}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -822,62 +878,231 @@ const TimeLogging = () => {
           )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination - unified style (same as LandingPageSections) */}
         {!loading && timeLogs.length > 0 && (
-          <div
-            className="card-footer border-top-0 py-2"
-            style={{ backgroundColor: "var(--background-light)" }}
-          >
+          <div className="card-footer bg-white border-top px-3 py-2">
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-              <div className="small text-muted">
-                Showing {paginationMeta.from} to {paginationMeta.to} of{" "}
-                {paginationMeta.total} time logs
+              <div className="text-center text-md-start">
+                <small style={{ color: "var(--text-muted)" }}>
+                  Showing{" "}
+                  <span
+                    className="fw-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {paginationMeta.from || startIndex + 1}-
+                    {paginationMeta.to ||
+                      Math.min(
+                        startIndex + timeLogs.length,
+                        paginationMeta.total
+                      )}
+                  </span>{" "}
+                  of{" "}
+                  <span
+                    className="fw-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {paginationMeta.total}
+                  </span>{" "}
+                  time logs
+                </small>
               </div>
+
               <div className="d-flex align-items-center gap-2">
                 <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1 || loading}
+                  className="btn btn-sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
+                  disabled={
+                    paginationMeta.current_page === 1 ||
+                    loading ||
+                    isActionDisabled()
+                  }
+                  style={{
+                    transition: "all 0.2s ease-in-out",
+                    border: "2px solid var(--primary-color)",
+                    color: "var(--primary-color)",
+                    backgroundColor: "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.transform = "translateY(-1px)";
+                      e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                      e.target.style.backgroundColor = "var(--primary-color)";
+                      e.target.style.color = "white";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.backgroundColor = "transparent";
+                    e.target.style.color = "var(--primary-color)";
+                  }}
                 >
-                  <i className="fas fa-angle-double-left"></i>
+                  <i className="fas fa-chevron-left me-1"></i>
+                  Previous
                 </button>
+
+                <div className="d-none d-md-flex gap-1">
+                  {(() => {
+                    let pages = [];
+                    const maxVisiblePages = 5;
+                    const totalPages = paginationMeta.last_page;
+
+                    if (totalPages <= maxVisiblePages) {
+                      pages = Array.from(
+                        { length: totalPages },
+                        (_, i) => i + 1
+                      );
+                    } else {
+                      pages.push(1);
+                      let start = Math.max(2, paginationMeta.current_page - 1);
+                      let end = Math.min(
+                        totalPages - 1,
+                        paginationMeta.current_page + 1
+                      );
+
+                      if (paginationMeta.current_page <= 2) {
+                        end = 4;
+                      } else if (
+                        paginationMeta.current_page >=
+                        totalPages - 1
+                      ) {
+                        start = totalPages - 3;
+                      }
+
+                      if (start > 2) {
+                        pages.push("...");
+                      }
+
+                      for (let i = start; i <= end; i++) {
+                        pages.push(i);
+                      }
+
+                      if (end < totalPages - 1) {
+                        pages.push("...");
+                      }
+
+                      if (totalPages > 1) {
+                        pages.push(totalPages);
+                      }
+                    }
+
+                    return pages.map((page, index) => (
+                      <button
+                        key={index}
+                        className="btn btn-sm"
+                        onClick={() => page !== "..." && setCurrentPage(page)}
+                        disabled={page === "..." || isActionDisabled()}
+                        style={{
+                          transition: "all 0.2s ease-in-out",
+                          border: `2px solid ${
+                            paginationMeta.current_page === page
+                              ? "var(--primary-color)"
+                              : "var(--input-border)"
+                          }`,
+                          color:
+                            paginationMeta.current_page === page
+                              ? "white"
+                              : "var(--text-primary)",
+                          backgroundColor:
+                            paginationMeta.current_page === page
+                              ? "var(--primary-color)"
+                              : "transparent",
+                          minWidth: "40px",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (
+                            !e.target.disabled &&
+                            paginationMeta.current_page !== page
+                          ) {
+                            e.target.style.transform = "translateY(-1px)";
+                            e.target.style.boxShadow =
+                              "0 2px 4px rgba(0,0,0,0.1)";
+                            e.target.style.backgroundColor =
+                              "var(--primary-light)";
+                            e.target.style.color = "var(--text-primary)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (
+                            !e.target.disabled &&
+                            paginationMeta.current_page !== page
+                          ) {
+                            e.target.style.transform = "translateY(0)";
+                            e.target.style.boxShadow = "none";
+                            e.target.style.backgroundColor = "transparent";
+                            e.target.style.color = "var(--text-primary)";
+                          }
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ));
+                  })()}
+                </div>
+
+                <div className="d-md-none">
+                  <small style={{ color: "var(--text-muted)" }}>
+                    Page {paginationMeta.current_page} of{" "}
+                    {paginationMeta.last_page}
+                  </small>
+                </div>
+
                 <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1 || loading}
-                >
-                  <i className="fas fa-angle-left"></i>
-                </button>
-                <span className="small text-muted">
-                  Page {paginationMeta.current_page} of {paginationMeta.last_page}
-                </span>
-                <button
-                  className="btn btn-sm btn-outline-primary"
+                  className="btn btn-sm"
                   onClick={() =>
                     setCurrentPage((prev) =>
-                      Math.min(paginationMeta.last_page, prev + 1)
+                      Math.min(prev + 1, paginationMeta.last_page)
                     )
                   }
                   disabled={
-                    currentPage === paginationMeta.last_page || loading
+                    paginationMeta.current_page === paginationMeta.last_page ||
+                    loading ||
+                    isActionDisabled()
                   }
+                  style={{
+                    transition: "all 0.2s ease-in-out",
+                    border: "2px solid var(--primary-color)",
+                    color: "var(--primary-color)",
+                    backgroundColor: "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.transform = "translateY(-1px)";
+                      e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                      e.target.style.backgroundColor = "var(--primary-color)";
+                      e.target.style.color = "white";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = "translateY(0)";
+                    e.target.style.boxShadow = "none";
+                    e.target.style.backgroundColor = "transparent";
+                    e.target.style.color = "var(--primary-color)";
+                  }}
                 >
-                  <i className="fas fa-angle-right"></i>
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => setCurrentPage(paginationMeta.last_page)}
-                  disabled={
-                    currentPage === paginationMeta.last_page || loading
-                  }
-                >
-                  <i className="fas fa-angle-double-right"></i>
+                  Next
+                  <i className="fas fa-chevron-right ms-1"></i>
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Time Log Details Modal */}
+      {selectedTimeLog && showDetailModal && (
+        <TimeLogDetailsModal
+          timeLog={selectedTimeLog}
+          onClose={() => {
+            setShowDetailModal(false);
+            setTimeout(() => setSelectedTimeLog(null), 250);
+          }}
+        />
+      )}
+        </>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const FilterAndSort = ({
@@ -19,6 +19,8 @@ const FilterAndSort = ({
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [expandedFilter, setExpandedFilter] = useState(null); // 'price' | 'category' | null
   const [filterView, setFilterView] = useState('main'); // 'main' | 'price' | 'category' | 'sort'
+  const isScrollingRef = useRef(false); // Track if drawer is currently scrolling
+  const scrollTimeoutRef = useRef(null); // Timeout to reset scrolling flag
 
   // Collections with products only
   const collectionsWithProducts = collections.filter((collection) => {
@@ -47,6 +49,44 @@ const FilterAndSort = ({
       return () => document.removeEventListener('mousedown', onClick);
     }
   }, [expandedFilter]);
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileDrawerOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      // Prevent body scroll
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        // Restore body scroll
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
+        // Clean up scroll timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+          scrollTimeoutRef.current = null;
+        }
+        // Reset scrolling flag
+        isScrollingRef.current = false;
+      };
+    } else {
+      // Clean up scroll timeout when drawer closes
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+      // Reset scrolling flag
+      isScrollingRef.current = false;
+    }
+  }, [mobileDrawerOpen]);
 
   const handlePriceFromChange = (value) => {
     onFiltersChange({ ...filters, priceFrom: value });
@@ -140,38 +180,53 @@ const FilterAndSort = ({
         </span>
       </div>
 
-      {/* Backdrop for mobile drawer */}
-      <AnimatePresence>
-        {mobileDrawerOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => {
+      {/* Backdrop for mobile drawer (no animation, always mounted when open) */}
+      {mobileDrawerOpen && (
+        <div
+          onClick={(e) => {
+            // Only close if clicking directly on backdrop AND not currently scrolling
+            if (e.target === e.currentTarget && !isScrollingRef.current) {
               setMobileDrawerOpen(false);
               setFilterView('main');
-            }}
-            className="mobile-drawer-backdrop"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.45)',
-              zIndex: 1001,
-              display: 'none',
-              width: '100vw',
-              maxWidth: '100vw',
-              overflow: 'hidden',
-            }}
-          />
-        )}
-      </AnimatePresence>
+            }
+          }}
+          className="mobile-drawer-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            zIndex: 1001,
+            display: 'none',
+            width: '100vw',
+            maxWidth: '100vw',
+            overflow: 'hidden',
+          }}
+        />
+      )}
 
-      {/* Mobile filter drawer */}
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: mobileDrawerOpen ? 0 : '100%' }}
-        transition={{ type: 'tween', duration: 0.3, ease: 'easeInOut' }}
+      {/* Mobile filter drawer (no AnimatePresence, simple CSS transition) */}
+      <div
         className="mobile-filter-drawer"
+        onClick={(e) => {
+          // Prevent ALL clicks inside drawer from reaching backdrop
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
+          // Prevent ALL mouse events from reaching backdrop
+          e.stopPropagation();
+        }}
+        onTouchStart={(e) => {
+          // Prevent ALL touch events from reaching backdrop
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          // Prevent ALL touch move events from reaching backdrop
+          e.stopPropagation();
+        }}
+        onTouchEnd={(e) => {
+          // Prevent ALL touch end events from reaching backdrop
+          e.stopPropagation();
+        }}
         style={{
           position: 'fixed',
           top: 0,
@@ -187,6 +242,12 @@ const FilterAndSort = ({
           overflowY: 'auto',
           overflowX: 'hidden',
           willChange: 'transform',
+          touchAction: 'pan-y',
+          WebkitOverflowScrolling: 'touch',
+          pointerEvents: 'auto',
+          // Simple slide-in / slide-out using CSS transform
+          transform: mobileDrawerOpen ? 'translateX(0%)' : 'translateX(100%)',
+          transition: 'transform 0.3s ease-in-out',
         }}
       >
         {/* Drawer header */}
@@ -256,7 +317,27 @@ const FilterAndSort = ({
         </div>
 
         {/* Drawer content */}
-        <div style={{ padding: '1.5rem', flex: 1 }}>
+        <div 
+          style={{ padding: '1.5rem', flex: 1 }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onScroll={(e) => {
+            e.stopPropagation();
+            // Mark as scrolling
+            isScrollingRef.current = true;
+            // Clear any existing timeout
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+            }
+            // Reset scrolling flag after scroll stops (500ms of no scrolling)
+            scrollTimeoutRef.current = setTimeout(() => {
+              isScrollingRef.current = false;
+            }, 500);
+          }}
+        >
           <AnimatePresence mode="wait">
             {filterView === 'main' && (
               <motion.div
@@ -843,7 +924,7 @@ const FilterAndSort = ({
             }}
             className="clear-all-btn"
             style={{
-              background: 'none',
+              background: 'none', 
               border: 'none',
               color: '#000',
               borderBottom: '1px solid #000',
@@ -878,7 +959,7 @@ const FilterAndSort = ({
             Apply
           </button>
         </div>
-      </motion.div>
+      </div>
 
       {/* Desktop filter and sort bar */}
       <div

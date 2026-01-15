@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
-import confetti from 'canvas-confetti';
 import PublicLogin from '../pages/public/auth/Login';
 import { showAlert } from '../services/notificationService';
 import Swal from 'sweetalert2';
@@ -23,184 +22,10 @@ const CartPanel = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
-  const hasFiredConfettiRef = useRef(false);
-  const cartPanelRef = useRef(null);
-  const [selectedDiscount, setSelectedDiscount] = useState(null); // null = auto, 'none' = no discount, '10%', '20%', '30%'
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
   const itemsCount = getCartItemCount();
   const subtotal = getCartTotal();
-  const maxThreshold = 10; // items needed for max 30% OFF
+  const finalTotal = subtotal; // No discounts - total equals subtotal
 
-  // Calculate auto discount based on item count: BUY 3 GET 10% OFF, BUY 5 GET 20% OFF, BUY 10 GET 30% OFF
-  let autoDiscountPercent = 0;
-  if (itemsCount >= 10) {
-    autoDiscountPercent = 0.3;
-  } else if (itemsCount >= 5) {
-    autoDiscountPercent = 0.2;
-  } else if (itemsCount >= 3) {
-    autoDiscountPercent = 0.1;
-  }
-
-  // Use selected discount or auto-apply based on item count
-  let discountPercent = 0;
-  if (selectedDiscount === 'none') {
-    discountPercent = 0;
-  } else if (selectedDiscount === '30%') {
-    discountPercent = 0.3;
-  } else if (selectedDiscount === '20%') {
-    discountPercent = 0.2;
-  } else if (selectedDiscount === '10%') {
-    discountPercent = 0.1;
-  } else {
-    // Auto-apply based on item count
-    discountPercent = autoDiscountPercent;
-  }
-
-  const discountAmount = subtotal * discountPercent;
-  const progress = Math.min(itemsCount / maxThreshold, 1); // 0 → 1 over 0–10 items
-  const isMaxDiscount = discountPercent >= 0.3;
-  const finalTotal = subtotal - discountAmount;
-
-  // Auto-apply discount when user qualifies (if not manually disabled)
-  useEffect(() => {
-    // If user qualifies for a discount and has it disabled, reset to auto mode
-    // This ensures discount is automatically deducted when available
-    if (autoDiscountPercent > 0 && selectedDiscount === 'none') {
-      setSelectedDiscount(null); // Reset to auto-apply mode to deduct from subtotal
-    }
-  }, [itemsCount, autoDiscountPercent]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    if (dropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownOpen]);
-
-  // Get discount badge text
-  const getDiscountBadgeText = () => {
-    if (discountPercent >= 0.3) {
-      return `BUY 10 GET 30% OFF -${formatPHP(discountAmount)}`;
-    } else if (discountPercent >= 0.2) {
-      return `BUY 5 GET 20% OFF -${formatPHP(discountAmount)}`;
-    } else if (discountPercent >= 0.1) {
-      return `BUY 3 GET 10% OFF -${formatPHP(discountAmount)}`;
-    }
-    return null;
-  };
-
-  // Get discount options for dropdown
-  const getDiscountOptions = () => {
-    const options = [
-      { value: 'none', label: 'Select discount' },
-    ];
-    
-    if (itemsCount >= 3) {
-      options.push({ value: '10%', label: 'BUY 3 GET 10% OFF' });
-    }
-    if (itemsCount >= 5) {
-      options.push({ value: '20%', label: 'BUY 5 GET 20% OFF' });
-    }
-    if (itemsCount >= 10) {
-      options.push({ value: '30%', label: 'BUY 10 GET 30% OFF' });
-    }
-    
-    return options;
-  };
-
-  const handleDiscountSelect = (value) => {
-    if (value === 'none') {
-      setSelectedDiscount('none');
-    } else {
-      setSelectedDiscount(value);
-    }
-    setDropdownOpen(false);
-  };
-
-  const handleRemoveDiscount = () => {
-    setSelectedDiscount('none');
-  };
-
-  // Calculate next discount tier and items remaining
-  let nextTier = '';
-  let itemsRemaining = 0;
-  if (itemsCount < 3) {
-    nextTier = '10% OFF';
-    itemsRemaining = 3 - itemsCount;
-  } else if (itemsCount < 5) {
-    nextTier = '20% OFF';
-    itemsRemaining = 5 - itemsCount;
-  } else if (itemsCount < 10) {
-    nextTier = '30% OFF';
-    itemsRemaining = 10 - itemsCount;
-  }
-
-  const discountTopText =
-    discountPercent >= 0.3
-      ? `Congratulations ${formatPHP(discountAmount)} OFF applied to your entire order!`
-      : `You are ${itemsRemaining} item${itemsRemaining !== 1 ? 's' : ''} away from ${nextTier}`;
-
-  // Note: we no longer lock page scroll when the cart is open to avoid layout shifts.
-
-  // Fire confetti once when max discount is reached while cart is open
-  useEffect(() => {
-    if (cartOpen && isMaxDiscount && !hasFiredConfettiRef.current) {
-      hasFiredConfettiRef.current = true;
-      if (cartPanelRef.current) {
-        const canvas = document.createElement('canvas');
-        canvas.style.position = 'absolute';
-        canvas.style.top = '0';
-        canvas.style.left = '0';
-        canvas.style.width = '100%';
-        canvas.style.height = '100%';
-        canvas.style.pointerEvents = 'none';
-        canvas.style.zIndex = '5';
-
-        // Match canvas size to cart panel
-        const panel = cartPanelRef.current;
-        canvas.width = panel.clientWidth;
-        canvas.height = panel.clientHeight;
-
-        panel.appendChild(canvas);
-
-        const scopedConfetti = confetti.create(canvas, {
-          resize: false, // we manage size ourselves
-          useWorker: false,
-        });
-
-        // Single very strong, fast burst from the top that showers the whole cart panel
-        scopedConfetti({
-          particleCount: 420,      // more sparkles
-          spread: 150,            // wider spread across the cart
-          startVelocity: 85,      // shoots faster
-          gravity: 1.25,          // falls down more quickly
-          scalar: 1.05,
-          ticks: 170,             // lifetime long enough to reach bottom
-          origin: { x: 0.5, y: 0.02 }, // top-center of the cart panel
-        }).finally(() => {
-          if (canvas && canvas.parentNode) {
-            canvas.parentNode.removeChild(canvas);
-          }
-        });
-      }
-    }
-
-    if (!cartOpen || !isMaxDiscount) {
-      hasFiredConfettiRef.current = false;
-    }
-  }, [cartOpen, isMaxDiscount]);
 
   // Handle checkout - requires customer to be logged in
   const handleCheckout = async () => {
@@ -262,7 +87,7 @@ const CartPanel = () => {
         items: orderItems,
         subtotal: subtotal,
         tax_amount: 0,
-        discount_amount: discountPercent > 0 ? (subtotal - finalTotal) : 0,
+        discount_amount: 0,
         total_amount: totalAmount,
         currency: 'PHP',
         billing_address: null,
@@ -434,7 +259,6 @@ const CartPanel = () => {
           {/* Cart Panel */}
           <motion.div
             className="cart-panel"
-            ref={cartPanelRef}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -752,6 +576,26 @@ const CartPanel = () => {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    // Prevent decreasing quantity below 1
+                                    if (item.quantity <= 1) {
+                                      showAlert.info(
+                                        'Minimum Quantity',
+                                        'Quantity cannot be less than 1. Please use the delete icon to remove this item from your cart.',
+                                        {
+                                          width: '280px',
+                                          padding: '1rem',
+                                          confirmButtonText: 'OK',
+                                          confirmButtonColor: '#000',
+                                          customClass: {
+                                            popup: 'small-alert-popup',
+                                            title: 'small-alert-title',
+                                            htmlContainer: 'small-alert-content',
+                                            confirmButton: 'small-alert-button',
+                                          },
+                                        }
+                                      );
+                                      return;
+                                    }
                                     updateQuantity(item.id, item.quantity - 1);
                                   }}
                                   onMouseEnter={(e) => {
@@ -899,6 +743,80 @@ const CartPanel = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Responsive styles for small alert modal */}
+      <style>{`
+        .small-alert-popup {
+          width: 280px !important;
+          padding: 1rem !important;
+          font-size: 0.9rem !important;
+        }
+
+        .small-alert-title {
+          font-size: 1rem !important;
+          margin-bottom: 0.75rem !important;
+          padding: 0 !important;
+        }
+
+        .small-alert-content {
+          font-size: 0.85rem !important;
+          line-height: 1.4 !important;
+          padding: 0 !important;
+          margin-bottom: 1rem !important;
+        }
+
+        .small-alert-button {
+          font-size: 0.85rem !important;
+          padding: 0.5rem 1.25rem !important;
+          margin-top: 0.5rem !important;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+          .small-alert-popup {
+            width: 90% !important;
+            max-width: 280px !important;
+            padding: 0.875rem !important;
+            margin: 1rem !important;
+          }
+
+          .small-alert-title {
+            font-size: 0.95rem !important;
+            margin-bottom: 0.625rem !important;
+          }
+
+          .small-alert-content {
+            font-size: 0.8rem !important;
+            margin-bottom: 0.875rem !important;
+          }
+
+          .small-alert-button {
+            font-size: 0.8rem !important;
+            padding: 0.45rem 1rem !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .small-alert-popup {
+            width: 85% !important;
+            max-width: 260px !important;
+            padding: 0.75rem !important;
+          }
+
+          .small-alert-title {
+            font-size: 0.9rem !important;
+          }
+
+          .small-alert-content {
+            font-size: 0.75rem !important;
+          }
+
+          .small-alert-button {
+            font-size: 0.75rem !important;
+            padding: 0.4rem 0.9rem !important;
+          }
+        }
+      `}</style>
     </>
   );
 };

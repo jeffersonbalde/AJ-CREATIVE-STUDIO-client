@@ -8,6 +8,7 @@ import ProductDetailsModal from './ProductDetailsModal';
 import { showAlert } from '../../services/notificationService';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import ImageLightbox from '../../components/ImageLightbox';
+import LoadingSpinner from '../../components/admin/LoadingSpinner';
 
 const ProductList = () => {
   const { token } = useAuth();
@@ -607,73 +608,15 @@ const ProductList = () => {
     inactive: products.filter((p) => !p.is_active).length,
   };
 
-  // Skeleton loaders
-  const ProductCardSkeleton = () => (
-    <div className="col-6 col-md-4 col-lg-3 col-xl-2-4">
-      <div className="card h-100 shadow-sm border" style={{ borderRadius: '8px', overflow: 'hidden' }}>
-        <div
-          className="placeholder-wave"
-          style={{
-            height: '200px',
-            backgroundColor: 'var(--background-light)',
-          }}
-        >
-          <span className="placeholder w-100 h-100"></span>
-        </div>
-        <div className="card-body p-3">
-          <div className="placeholder-wave mb-2">
-            <span className="placeholder col-10" style={{ height: '20px' }}></span>
-          </div>
-          <div className="placeholder-wave mb-2">
-            <span className="placeholder col-6" style={{ height: '20px', borderRadius: '12px' }}></span>
-          </div>
-          <div className="placeholder-wave">
-            <span className="placeholder col-8" style={{ height: '24px' }}></span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const StatsCardSkeleton = () => (
-    <div 
-      className="card stats-card h-100 shadow-sm"
-      style={{ 
-        border: '1px solid rgba(0, 0, 0, 0.125)',
-        borderRadius: '0.375rem'
-      }}
-    >
-      <div className="card-body p-3">
-        <div className="d-flex align-items-center">
-          <div className="flex-grow-1">
-            <div className="placeholder-wave mb-2">
-              <span className="placeholder col-9" style={{ height: '14px' }}></span>
-            </div>
-            <div className="placeholder-wave">
-              <span className="placeholder col-5" style={{ height: '28px' }}></span>
-            </div>
-          </div>
-          <div className="col-auto">
-            <div className="placeholder-wave">
-              <span
-                className="placeholder rounded-circle"
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50% !important',
-                }}
-              ></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
-    <div className="container-fluid px-3 pt-0 pb-2 admin-dashboard-container fadeIn">
-      {/* Page Header */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
+    <div className={`container-fluid px-3 pt-0 pb-2 admin-dashboard-container ${!loading ? 'fadeIn' : ''}`}>
+      {loading ? (
+        <LoadingSpinner text="Loading products..." />
+      ) : (
+        <>
+          {/* Page Header */}
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3">
         <div className="flex-grow-1 mb-2 mb-md-0">
           <h1
             className="h4 mb-1 fw-bold"
@@ -754,118 +697,140 @@ const ProductList = () => {
       {/* Statistics Cards */}
       <div className="row g-3 mb-4">
         <div className="col-6 col-md-3">
-          {loading ? (
-            <StatsCardSkeleton />
-          ) : (
-            <div 
-              className="card stats-card h-100 shadow-sm"
-              style={{ 
-                border: '1px solid rgba(0, 0, 0, 0.125)',
-                borderRadius: '0.375rem'
-              }}
-            >
-              <div className="card-body p-3">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <div
-                      className="text-xs fw-semibold text-uppercase mb-1"
-                      style={{ color: 'var(--primary-color)' }}
-                    >
-                      Total Products
-                    </div>
-                    <div
-                      className="h4 mb-0 fw-bold"
-                      style={{ color: 'var(--primary-color)' }}
-                    >
-                      {statistics.total}
-                    </div>
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: 'var(--primary-color)' }}
+                  >
+                    Total Products
                   </div>
-                  <div className="col-auto">
-                    <i
-                      className="fas fa-box fa-2x"
-                      style={{ color: 'var(--primary-light)', opacity: 0.7 }}
-                    ></i>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: 'var(--primary-color)' }}
+                  >
+                    {loading ? '...' : statistics.total}
                   </div>
+                </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-box fa-2x"
+                    style={{ color: 'var(--primary-light)', opacity: 0.7 }}
+                  ></i>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
         <div className="col-6 col-md-3">
-          {loading ? (
-            <StatsCardSkeleton />
-          ) : (
-            <div 
-              className="card stats-card h-100 shadow-sm"
-              style={{ 
-                border: '1px solid rgba(0, 0, 0, 0.125)',
-                borderRadius: '0.375rem'
-              }}
-            >
-              <div className="card-body p-3">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <div
-                      className="text-xs fw-semibold text-uppercase mb-1"
-                      style={{ color: 'var(--success-color)' }}
-                    >
-                      Active
-                    </div>
-                    <div
-                      className="h4 mb-0 fw-bold"
-                      style={{ color: 'var(--success-color)' }}
-                    >
-                      {statistics.active}
-                    </div>
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: 'var(--success-color)' }}
+                  >
+                    Active
                   </div>
-                  <div className="col-auto">
-                    <i
-                      className="fas fa-check-circle fa-2x"
-                      style={{ color: '#28a745', opacity: 0.7 }}
-                    ></i>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: 'var(--success-color)' }}
+                  >
+                    {loading ? '...' : statistics.active}
                   </div>
+                </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-check-circle fa-2x"
+                    style={{ color: '#28a745', opacity: 0.7 }}
+                  ></i>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
         <div className="col-6 col-md-3">
-          {loading ? (
-            <StatsCardSkeleton />
-          ) : (
-            <div 
-              className="card stats-card h-100 shadow-sm"
-              style={{ 
-                border: '1px solid rgba(0, 0, 0, 0.125)',
-                borderRadius: '0.375rem'
-              }}
-            >
-              <div className="card-body p-3">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <div
-                      className="text-xs fw-semibold text-uppercase mb-1"
-                      style={{ color: 'var(--danger-color)' }}
-                    >
-                      Inactive
-                    </div>
-                    <div
-                      className="h4 mb-0 fw-bold"
-                      style={{ color: 'var(--danger-color)' }}
-                    >
-                      {statistics.inactive}
-                    </div>
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: 'var(--danger-color)' }}
+                  >
+                    Inactive
                   </div>
-                  <div className="col-auto">
-                    <i
-                      className="fas fa-exclamation-triangle fa-2x"
-                      style={{ color: '#dc3545', opacity: 0.7 }}
-                    ></i>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: 'var(--danger-color)' }}
+                  >
+                    {loading ? '...' : statistics.inactive}
                   </div>
+                </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-exclamation-triangle fa-2x"
+                    style={{ color: '#ffc107', opacity: 0.7 }}
+                  ></i>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div 
+            className="card stats-card h-100 shadow-sm"
+            style={{ 
+              border: '1px solid rgba(0, 0, 0, 0.125)',
+              borderRadius: '0.375rem'
+            }}
+          >
+            <div className="card-body p-3">
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div
+                    className="text-xs fw-semibold text-uppercase mb-1"
+                    style={{ color: 'var(--danger-color)' }}
+                  >
+                    Out of Stock
+                  </div>
+                  <div
+                    className="h4 mb-0 fw-bold"
+                    style={{ color: 'var(--danger-color)' }}
+                  >
+                    {loading ? '...' : statistics.outOfStock}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  <i
+                    className="fas fa-times-circle fa-2x"
+                    style={{ color: '#dc3545', opacity: 0.7 }}
+                  ></i>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1036,25 +1001,7 @@ const ProductList = () => {
         </div>
 
         <div className="card-body p-0">
-          {loading ? (
-            <div className="p-3">
-              <div className="row g-3">
-                {[...Array(8)].map((_, index) => (
-                  <ProductCardSkeleton key={index} />
-                ))}
-              </div>
-              <div className="text-center py-4">
-                <div
-                  className="spinner-border me-2"
-                  style={{ color: 'var(--primary-color)' }}
-                  role="status"
-                ></div>
-                <span className="small" style={{ color: 'var(--text-muted)' }}>
-                  Fetching product data...
-                </span>
-              </div>
-            </div>
-          ) : currentProducts.length === 0 ? (
+          {currentProducts.length === 0 ? (
             <div className="text-center py-5">
               <div className="mb-3">
                 <i
@@ -1212,23 +1159,7 @@ const ProductList = () => {
                             }}
                           >
                             {displayImage ? (
-                              <>
-                                {/* Loading Skeleton - Show when image is not fully loaded */}
-                                {imageLoadingMap[displayImage] !== false && (
-                                  <div
-                                    className="position-absolute w-100 h-100 skeleton-shimmer"
-                                    style={{
-                                      backgroundColor: '#E0E0E0',
-                                      background: 'linear-gradient(90deg, #E0E0E0 25%, #F5F5F5 50%, #E0E0E0 75%)',
-                                      backgroundSize: '200% 100%',
-                                      animation: 'shimmer 1.5s ease-in-out infinite',
-                                      zIndex: 1,
-                                      top: 0,
-                                      left: 0,
-                                    }}
-                                  />
-                                )}
-                                <img
+                              <img
                                   key={`${product.id}-${imageCacheBuster}-${displayImage}`}
                                   src={displayImage}
                                   alt={product.title}
@@ -1268,7 +1199,6 @@ const ProductList = () => {
                                     }
                                   }}
                                 />
-                              </>
                             ) : null}
                             <div
                               className="position-absolute w-100 h-100 d-flex align-items-center justify-content-center image-placeholder"
@@ -1469,23 +1399,7 @@ const ProductList = () => {
                                   const featureIdx = getFeatureIndex(product.id, gallery.length);
                                   const heroImage = gallery.length > 0 ? gallery[featureIdx] : thumbnailUrl;
                                   return heroImage ? (
-                                    <>
-                                      {/* Loading Skeleton - Show when image is not fully loaded */}
-                                      {imageLoadingMap[heroImage] !== false && (
-                                        <div
-                                          className="position-absolute w-100 h-100 skeleton-shimmer"
-                                          style={{
-                                            backgroundColor: '#E0E0E0',
-                                            background: 'linear-gradient(90deg, #E0E0E0 25%, #F5F5F5 50%, #E0E0E0 75%)',
-                                            backgroundSize: '200% 100%',
-                                            animation: 'shimmer 1.5s ease-in-out infinite',
-                                            zIndex: 1,
-                                            top: 0,
-                                            left: 0,
-                                          }}
-                                        />
-                                      )}
-                                      <img
+                                    <img
                                         key={`${product.id}-list-${imageCacheBuster}-${heroImage}`}
                                         src={heroImage}
                                         alt={product.title}
@@ -1514,7 +1428,6 @@ const ProductList = () => {
                                           e.target.style.display = 'none';
                                         }}
                                       />
-                                    </>
                                   ) : (
                                     <div className="w-100 h-100 d-flex align-items-center justify-content-center">
                                       <FaBox className="text-muted" size={32} />
@@ -2054,6 +1967,8 @@ const ProductList = () => {
         onNext={showNextImage}
         onPrev={showPrevImage}
       />
+        </>
+      )}
     </div>
   );
 };

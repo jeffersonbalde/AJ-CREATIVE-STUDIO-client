@@ -28,35 +28,178 @@ const formatCurrency = (value = 0) =>
   })}`;
 
 export default function AdminDashboard() {
-  const { admin } = useAuth();
+  const { admin, token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Mock data for now - replace with actual API calls later
-  const stats = {
+  const [stats, setStats] = useState({
     totalCustomers: 0,
-    pendingApprovals: 0,
+    totalOrders: 0,
+    paidOrders: 0,
+    pendingOrders: 0,
+    failedOrders: 0,
     totalRevenue: 0,
-    delinquentAccounts: 0,
-    activeConnections: 0,
-    monthlyConsumption: 0,
-    staffMembers: 0,
-    systemUptime: 100,
-    pendingBills: 0,
+    todayRevenue: 0,
+    monthRevenue: 0,
+    activeProducts: 0,
+  });
+  const [recentOrders, setRecentOrders] = useState([]);
+
+  const apiBaseUrl =
+    import.meta.env.VITE_LARAVEL_API ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:8000";
+
+  const fetchDashboardStats = async (isInitial = false) => {
+    if (!token) return;
+    if (isInitial) {
+      setLoading(true);
+    }
+    try {
+      // 1) Customers stats
+      let totalCustomers = 0;
+      try {
+        const respCustomers = await fetch(`${apiBaseUrl}/customers/stats`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+        if (respCustomers.ok) {
+          const dataCustomers = await respCustomers.json();
+          if (dataCustomers.success && dataCustomers.stats) {
+            totalCustomers = dataCustomers.stats.total || 0;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load customer stats:", err);
+      }
+
+      // 2) Orders list (admin can see all)
+      let totalOrders = 0;
+      let paidOrders = 0;
+      let pendingOrders = 0;
+      let failedOrders = 0;
+      let totalRevenue = 0;
+      let todayRevenue = 0;
+      let monthRevenue = 0;
+      let recentOrdersData = [];
+
+      try {
+        const params = new URLSearchParams();
+        params.append("per_page", "1000");
+        params.append("page", "1");
+        const respOrders = await fetch(
+          `${apiBaseUrl}/orders?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          }
+        );
+        if (respOrders.ok) {
+          const dataOrders = await respOrders.json();
+          const orders = Array.isArray(dataOrders.orders)
+            ? dataOrders.orders
+            : [];
+          totalOrders = orders.length;
+          const today = new Date();
+          const startOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+          );
+
+          orders.forEach((o) => {
+            const paymentStatus = o.payment_status;
+            const amount = Number(o.total_amount || 0);
+
+            if (paymentStatus === "paid") {
+              paidOrders += 1;
+              totalRevenue += amount;
+
+              if (o.created_at) {
+                const created = new Date(o.created_at);
+                if (created.toDateString() === today.toDateString()) {
+                  todayRevenue += amount;
+                }
+                if (created >= startOfMonth && created <= today) {
+                  monthRevenue += amount;
+                }
+              }
+            } else if (paymentStatus === "pending") {
+              pendingOrders += 1;
+            } else if (paymentStatus === "failed") {
+              failedOrders += 1;
+            }
+          });
+
+          recentOrdersData = orders
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(b.created_at || 0) - new Date(a.created_at || 0)
+            )
+            .slice(0, 5);
+        }
+      } catch (err) {
+        console.error("Failed to load orders for dashboard:", err);
+      }
+
+      // 3) Products list (for activeProducts)
+      let activeProducts = 0;
+      try {
+        const respProducts = await fetch(`${apiBaseUrl}/products?per_page=1000`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+        if (respProducts.ok) {
+          const dataProducts = await respProducts.json();
+          let products = [];
+          if (Array.isArray(dataProducts.products)) {
+            products = dataProducts.products;
+          } else if (
+            dataProducts.success &&
+            Array.isArray(dataProducts.products)
+          ) {
+            products = dataProducts.products;
+          }
+          activeProducts = products.filter((p) => p.is_active).length;
+        }
+      } catch (err) {
+        console.error("Failed to load products for dashboard:", err);
+      }
+
+      setStats({
+        totalCustomers,
+        totalOrders,
+        paidOrders,
+        pendingOrders,
+        failedOrders,
+        totalRevenue,
+        todayRevenue,
+        monthRevenue,
+        activeProducts,
+      });
+      setRecentOrders(recentOrdersData);
+    } catch (error) {
+      console.error("Error loading dashboard stats:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-  }, []);
+    fetchDashboardStats(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, apiBaseUrl]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    fetchDashboardStats(false);
   };
 
   if (loading) {
@@ -176,12 +319,12 @@ export default function AdminDashboard() {
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <div className="text-white-50 small">Pending Approvals</div>
+                  <div className="text-white-50 small">Pending Orders</div>
                   <div className="h4 fw-bold my-1">
-                    {formatNumber(stats.pendingApprovals)}
+                    {formatNumber(stats.pendingOrders)}
                   </div>
                   <div className="small">
-                    {stats.pendingApprovals > 0
+                    {stats.pendingOrders > 0
                       ? "Requires attention"
                       : "Up to date"}
                   </div>
@@ -190,7 +333,7 @@ export default function AdminDashboard() {
                   className="bg-white rounded-circle d-flex align-items-center justify-content-center"
                   style={{ width: "50px", height: "50px" }}
                 >
-                  <FaCheckCircle size={20} className="text-warning" />
+                  <FaClock size={20} className="text-warning" />
                 </div>
               </div>
             </div>
@@ -205,9 +348,9 @@ export default function AdminDashboard() {
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <div className="text-white-50 small">Monthly Revenue</div>
+                  <div className="text-white-50 small">Monthly Revenue (Paid)</div>
                   <div className="h4 fw-bold my-1">
-                    {formatCurrency(stats.totalRevenue)}
+                    {formatCurrency(stats.monthRevenue)}
                   </div>
                   <div className="small d-flex align-items-center">
                     <FaChartLine className="me-1" />
@@ -233,14 +376,14 @@ export default function AdminDashboard() {
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <div className="text-white-50 small">Delinquent Accounts</div>
+                  <div className="text-white-50 small">Failed Orders</div>
                   <div className="h4 fw-bold my-1">
-                    {formatNumber(stats.delinquentAccounts)}
+                    {formatNumber(stats.failedOrders)}
                   </div>
                   <div className="small">
-                    {stats.delinquentAccounts > 0
-                      ? "Over 30 days due"
-                      : "All current"}
+                    {stats.failedOrders > 0
+                      ? "Check payment issues"
+                      : "All good"}
                   </div>
                 </div>
                 <div
@@ -267,9 +410,9 @@ export default function AdminDashboard() {
                 <div className="card-body text-center p-3">
                   <FaUsers className="text-primary mb-2" size={24} />
                   <div className="fw-bold text-dark h5">
-                    {formatNumber(stats.activeConnections)}
+                    {formatNumber(stats.totalOrders)}
                   </div>
-                  <div className="text-muted small">Active Connections</div>
+                  <div className="text-muted small">Total Orders</div>
                 </div>
               </div>
             </div>
@@ -281,9 +424,9 @@ export default function AdminDashboard() {
                 <div className="card-body text-center p-3">
                   <FaChartBar className="text-primary mb-2" size={24} />
                   <div className="fw-bold text-dark h5">
-                    {formatNumber(Math.round(stats.monthlyConsumption))} m³
+                    {formatNumber(stats.activeProducts)}
                   </div>
-                  <div className="text-muted small">Monthly Usage</div>
+                  <div className="text-muted small">Active Products</div>
                 </div>
               </div>
             </div>
@@ -295,9 +438,9 @@ export default function AdminDashboard() {
                 <div className="card-body text-center p-3">
                   <FaUsers className="text-primary mb-2" size={24} />
                   <div className="fw-bold text-dark h5">
-                    {formatNumber(stats.staffMembers)}
+                    {formatCurrency(stats.todayRevenue)}
                   </div>
-                  <div className="text-muted small">Staff Members</div>
+                  <div className="text-muted small">Today Revenue</div>
                 </div>
               </div>
             </div>
@@ -309,9 +452,9 @@ export default function AdminDashboard() {
                 <div className="card-body text-center p-3">
                   <FaDatabase className="text-primary mb-2" size={24} />
                   <div className="fw-bold text-dark h5">
-                    {stats.systemUptime?.toFixed(1)}%
+                    {formatCurrency(stats.totalRevenue)}
                   </div>
-                  <div className="text-muted small">System Uptime</div>
+                  <div className="text-muted small">All-time Paid Revenue</div>
                 </div>
               </div>
             </div>
@@ -338,22 +481,87 @@ export default function AdminDashboard() {
 
       {/* Main Content Grid */}
       <div className="row g-4">
-        {/* Recent Activities */}
+        {/* Recent Orders */}
         <div className="col-xl-8">
           <div className="card mb-4" style={{ borderRadius: "10px" }}>
             <div className="card-header bg-white border-bottom-0 py-3">
               <div className="d-flex justify-content-between align-items-center">
                 <h5 className="card-title mb-0 text-dark d-flex align-items-center">
                   <FaHistory className="me-2 text-primary" />
-                  Recent Activities
+                  Recent Orders
                 </h5>
-                <span className="badge bg-primary">0</span>
+                <span className="badge bg-primary">
+                  {recentOrders.length}
+                </span>
               </div>
             </div>
             <div className="card-body p-0">
-              <div className="text-center py-4 text-muted">
-                No activity recorded yet.
-              </div>
+              {recentOrders.length === 0 ? (
+                <div className="text-center py-4 text-muted">
+                  No recent orders.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover mb-0">
+                    <thead>
+                      <tr>
+                        <th className="small fw-semibold text-muted">Order</th>
+                        <th className="small fw-semibold text-muted">
+                          Customer
+                        </th>
+                        <th className="small fw-semibold text-muted text-end">
+                          Total
+                        </th>
+                        <th className="small fw-semibold text-muted">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentOrders.map((order) => (
+                        <tr key={order.id}>
+                          <td>
+                            <div className="fw-semibold text-dark">
+                              {order.order_number || `Order #${order.id}`}
+                            </div>
+                            <div className="small text-muted">
+                              {formatDateTime(order.created_at)}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="small text-dark">
+                              {order.customer?.name ||
+                                order.guest_name ||
+                                "Guest Customer"}
+                            </div>
+                            <div className="small text-muted">
+                              {order.customer?.email || order.guest_email || ""}
+                            </div>
+                          </td>
+                          <td className="text-end small fw-semibold">
+                            {formatCurrency(order.total_amount)}
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                order.payment_status === "paid"
+                                  ? "bg-success"
+                                  : order.payment_status === "failed"
+                                  ? "bg-danger"
+                                  : order.payment_status === "pending"
+                                  ? "bg-warning text-dark"
+                                  : "bg-secondary"
+                              }`}
+                            >
+                              {order.payment_status || "N/A"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

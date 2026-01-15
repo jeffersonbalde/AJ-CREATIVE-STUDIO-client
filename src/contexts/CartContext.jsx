@@ -30,6 +30,8 @@ export const CartProvider = ({ children }) => {
   const hasMergedGuestCartRef = useRef(false);
   const prevAuthStateRef = useRef(isCustomerAuthenticated);
   const prevCustomerTokenRef = useRef(customerToken);
+  const pendingOperationsRef = useRef(new Map()); // Track pending operations by productId
+  const operationCounterRef = useRef(0); // Track operation sequence
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -46,6 +48,11 @@ export const CartProvider = ({ children }) => {
         }
       } catch (e) {
         // Ignore
+      }
+
+      // Skip if there are pending operations (don't reload while user is modifying cart)
+      if (pendingOperationsRef.current.size > 0) {
+        return;
       }
 
       // Get token - check localStorage first (most reliable)
@@ -265,90 +272,177 @@ export const CartProvider = ({ children }) => {
   }, [cartItems]);
 
   const addToCart = async (product) => {
-    // If authenticated, add to backend first, then update local state from response
-    if (isCustomerAuthenticated && customerToken) {
-      try {
-        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/add`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${customerToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            product_id: parseInt(product.id),
-            quantity: 1,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.cart) {
-            // Update local state from backend response (source of truth)
-            setCartItems(data.cart);
-            localStorage.setItem('cart_items', JSON.stringify(data.cart));
-            return; // Success, exit early
-          }
-        }
-        // If backend call fails, fall through to local update
-      } catch (error) {
-        console.error('Error adding to cart in backend:', error);
-        // Fall through to local update if backend fails
-      }
-    }
-
-    // For guest users or if backend call failed, update local state
-    const existingItemIndex = cartItems.findIndex(item => item.id === product.id);
+    // OPTIMISTIC UPDATE: Update UI immediately for instant response
+    // Convert both IDs to strings for reliable comparison (handles string/number mismatch)
+    const productId = String(product.id);
+    const existingItemIndex = cartItems.findIndex(item => String(item.id) === productId);
     
+    let updatedCart;
     if (existingItemIndex >= 0) {
-      const updatedCart = [...cartItems];
-      updatedCart[existingItemIndex].quantity += 1;
-      setCartItems(updatedCart);
+      // Item exists - increment quantity
+      updatedCart = [...cartItems];
+      updatedCart[existingItemIndex] = {
+        ...updatedCart[existingItemIndex],
+        quantity: (updatedCart[existingItemIndex].quantity || 1) + 1
+      };
     } else {
-      setCartItems([...cartItems, { ...product, quantity: 1 }]);
+      // New item - add to cart
+      updatedCart = [...cartItems, { ...product, quantity: 1 }];
+    }
+    
+    setCartItems(updatedCart);
+    localStorage.setItem('cart_items', JSON.stringify(updatedCart));
+
+    // If authenticated, sync with backend in background (non-blocking)
+    if (isCustomerAuthenticated && customerToken) {
+      // Use setTimeout to make it non-blocking
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/add`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${customerToken}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              product_id: parseInt(product.id),
+              quantity: 1,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.cart) {
+              // Update local state from backend response (source of truth)
+              // Use functional update to prevent overwriting correct optimistic updates
+              setCartItems((currentCart) => {
+                // Check if backend cart matches current optimistic state
+                // If they match, keep current state to prevent flickering
+                const currentItem = currentCart.find(item => String(item.id) === productId);
+                const backendItem = data.cart.find(item => String(item.id) === productId);
+                
+                // If both have the item with same quantity, keep current state
+                if (currentItem && backendItem && currentItem.quantity === backendItem.quantity) {
+                  // Quantities match - optimistic update was correct, keep it
+                  return currentCart;
+                }
+                
+                // Backend has different state - use it as source of truth
+                return data.cart;
+              });
+              // Always update localStorage with backend response
+              localStorage.setItem('cart_items', JSON.stringify(data.cart));
+            }
+          }
+        } catch (error) {
+          console.error('Error adding to cart in backend:', error);
+        }
+      }, 0);
     }
   };
 
   const removeFromCart = async (productId) => {
-    // If authenticated, remove from backend first, then update local state
-    if (isCustomerAuthenticated && customerToken) {
-      try {
-        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/remove/${productId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${customerToken}`,
-            'Accept': 'application/json',
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            // Update local state from backend response (source of truth)
-            const updatedCart = data.cart || [];
-            setCartItems(updatedCart);
-            if (updatedCart.length === 0) {
-              localStorage.removeItem('cart_items');
-            } else {
-              localStorage.setItem('cart_items', JSON.stringify(updatedCart));
-            }
-            return; // Success, exit early
-          }
-        }
-        // If backend call fails, fall through to local update
-      } catch (error) {
-        console.error('Error removing from cart in backend:', error);
-        // Fall through to local update if backend fails
-      }
-    }
-
-    // For guest users or if backend call failed, update local state
+    // OPTIMISTIC UPDATE: Update UI immediately for instant response
     const updatedCart = cartItems.filter(item => item.id !== productId);
     setCartItems(updatedCart);
     if (updatedCart.length === 0) {
       localStorage.removeItem('cart_items');
     } else {
       localStorage.setItem('cart_items', JSON.stringify(updatedCart));
+    }
+
+    // If authenticated, sync with backend in background (non-blocking)
+    if (isCustomerAuthenticated && customerToken) {
+      // Cancel any pending operation for this product (in case of rapid clicks)
+      const pendingOp = pendingOperationsRef.current.get(`remove_${productId}`);
+      if (pendingOp) {
+        if (pendingOp.timeoutId) {
+          clearTimeout(pendingOp.timeoutId);
+        }
+        if (pendingOp.abortController) {
+          pendingOp.abortController.abort();
+        }
+      }
+
+      // Increment operation counter
+      operationCounterRef.current += 1;
+      const currentOpId = operationCounterRef.current;
+      const abortController = new AbortController();
+
+      // Use setTimeout to make it non-blocking
+      const timeoutId = setTimeout(async () => {
+        try {
+          const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/remove/${productId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${customerToken}`,
+              'Accept': 'application/json',
+            },
+            signal: abortController.signal,
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              // Only update if this is still the latest operation
+              const latestOp = pendingOperationsRef.current.get(`remove_${productId}`);
+              if (latestOp && latestOp.opId === currentOpId) {
+                // Get current state to verify item is still removed
+                setCartItems((currentCart) => {
+                  const itemStillExists = currentCart.some(item => item.id === productId);
+                  const backendCart = data.cart || [];
+                  const backendItemExists = backendCart.some(item => item.id === productId);
+                  
+                  // If item was successfully removed from backend, use backend cart
+                  // This ensures consistency even if optimistic update was somehow reverted
+                  if (!backendItemExists) {
+                    // Backend confirms item is removed - use backend as source of truth
+                    if (backendCart.length === 0) {
+                      localStorage.removeItem('cart_items');
+                    } else {
+                      localStorage.setItem('cart_items', JSON.stringify(backendCart));
+                    }
+                    return backendCart;
+                  }
+                  
+                  // If backend still has the item (shouldn't happen), keep current optimistic state
+                  // This prevents the item from reappearing if backend response is stale
+                  if (!itemStillExists) {
+                    // Item is removed in optimistic state - keep it removed
+                    return currentCart;
+                  }
+                  
+                  // Item exists in both - something went wrong, but prefer backend
+                  return backendCart;
+                });
+              }
+            }
+          }
+          
+          // Remove this operation from pending
+          const stillPending = pendingOperationsRef.current.get(`remove_${productId}`);
+          if (stillPending && stillPending.opId === currentOpId) {
+            pendingOperationsRef.current.delete(`remove_${productId}`);
+          }
+        } catch (error) {
+          if (error.name !== 'AbortError') {
+            console.error('Error removing from cart in backend:', error);
+          }
+          // Remove this operation from pending
+          const stillPending = pendingOperationsRef.current.get(`remove_${productId}`);
+          if (stillPending && stillPending.opId === currentOpId) {
+            pendingOperationsRef.current.delete(`remove_${productId}`);
+          }
+        }
+      }, 0);
+
+      // Store pending operation
+      pendingOperationsRef.current.set(`remove_${productId}`, {
+        opId: currentOpId,
+        timeoutId: timeoutId,
+        abortController: abortController,
+      });
     }
   };
 
@@ -358,40 +452,7 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    // If authenticated, update backend first, then update local state from response
-    if (isCustomerAuthenticated && customerToken) {
-      try {
-        const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/update/${productId}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${customerToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({ quantity }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.cart) {
-            // Update local state from backend response (source of truth)
-            setCartItems(data.cart);
-            if (data.cart.length === 0) {
-              localStorage.removeItem('cart_items');
-            } else {
-              localStorage.setItem('cart_items', JSON.stringify(data.cart));
-            }
-            return; // Success, exit early
-          }
-        }
-        // If backend call fails, fall through to local update
-      } catch (error) {
-        console.error('Error updating cart quantity in backend:', error);
-        // Fall through to local update if backend fails
-      }
-    }
-
-    // For guest users or if backend call failed, update local state
+    // OPTIMISTIC UPDATE: Update UI immediately for instant response
     const updatedCart = cartItems.map(item =>
       item.id === productId ? { ...item, quantity } : item
     );
@@ -400,6 +461,101 @@ export const CartProvider = ({ children }) => {
       localStorage.removeItem('cart_items');
     } else {
       localStorage.setItem('cart_items', JSON.stringify(updatedCart));
+    }
+
+    // If authenticated, sync with backend in background (non-blocking)
+    if (isCustomerAuthenticated && customerToken) {
+      // Cancel any pending operation for this product
+      const pendingOp = pendingOperationsRef.current.get(productId);
+      if (pendingOp) {
+        if (pendingOp.timeoutId) {
+          clearTimeout(pendingOp.timeoutId);
+        }
+        if (pendingOp.abortController) {
+          pendingOp.abortController.abort();
+        }
+      }
+
+      // Increment operation counter for this request
+      operationCounterRef.current += 1;
+      const currentOpId = operationCounterRef.current;
+      const expectedQuantity = quantity;
+      const abortController = new AbortController();
+
+      // Debounce backend sync to batch rapid clicks
+      const timeoutId = setTimeout(async () => {
+        try {
+          const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart/update/${productId}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${customerToken}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ quantity: expectedQuantity }),
+            signal: abortController.signal,
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.cart) {
+              // Only update if this is still the latest operation for this product
+              const latestOp = pendingOperationsRef.current.get(productId);
+              if (latestOp && latestOp.opId === currentOpId) {
+                // Get current optimistic state
+                setCartItems((currentCart) => {
+                  const currentItem = currentCart.find(item => item.id === productId);
+                  const currentOptimisticQty = currentItem ? currentItem.quantity : expectedQuantity;
+                  
+                  // Backend response
+                  const backendItem = data.cart.find(item => item.id === productId);
+                  
+                  // Only update from backend if:
+                  // 1. Backend quantity matches what we expected (normal case)
+                  // 2. OR current optimistic quantity still matches expected (no newer clicks happened)
+                  if (backendItem && 
+                      (backendItem.quantity === expectedQuantity || 
+                       currentOptimisticQty === expectedQuantity)) {
+                    // Backend is source of truth
+                    if (data.cart.length === 0) {
+                      localStorage.removeItem('cart_items');
+                    } else {
+                      localStorage.setItem('cart_items', JSON.stringify(data.cart));
+                    }
+                    return data.cart;
+                  }
+                  
+                  // Keep current optimistic state (newer clicks happened)
+                  return currentCart;
+                });
+              }
+            }
+          }
+          
+          // Remove this operation from pending
+          const stillPending = pendingOperationsRef.current.get(productId);
+          if (stillPending && stillPending.opId === currentOpId) {
+            pendingOperationsRef.current.delete(productId);
+          }
+        } catch (error) {
+          if (error.name !== 'AbortError') {
+            console.error('Error updating cart quantity in backend:', error);
+          }
+          // Remove this operation from pending
+          const stillPending = pendingOperationsRef.current.get(productId);
+          if (stillPending && stillPending.opId === currentOpId) {
+            pendingOperationsRef.current.delete(productId);
+          }
+        }
+      }, 200); // 200ms debounce to batch rapid clicks
+
+      // Store pending operation
+      pendingOperationsRef.current.set(productId, {
+        opId: currentOpId,
+        quantity: expectedQuantity,
+        timeoutId: timeoutId,
+        abortController: abortController,
+      });
     }
   };
 
