@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -29,6 +29,9 @@ const OrderConfirmation = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [imageLoadingStates, setImageLoadingStates] = useState({});
+  const [imageErrorStates, setImageErrorStates] = useState({});
+  const checkedImagesRef = useRef(new Set());
 
   useEffect(() => {
     // Refresh auth state before fetching order (in case token was lost during PayMaya redirect)
@@ -65,12 +68,53 @@ const OrderConfirmation = () => {
     // We only care about changes in payment_status for this polling
   }, [order?.payment_status, orderNumber]);
 
+  // Fallback check for cached images after render (in case pre-check missed any)
+  useEffect(() => {
+    if (!order?.items) return;
+
+    // Use setTimeout to check after DOM is updated
+    const timeoutId = setTimeout(() => {
+      order.items.forEach((item, index) => {
+        const thumbnailUrl = getProductImage(item.product);
+        if (!thumbnailUrl) return;
+
+        const imageKey = `${item.id || index}_${item.product_id || index}`;
+        
+        // Skip if already checked or already marked as loaded
+        if (checkedImagesRef.current.has(imageKey) || imageLoadingStates[imageKey] === false) {
+          return;
+        }
+
+        // Find the actual img element in the DOM
+        const imgElements = document.querySelectorAll(`img[alt="${item.product_name}"]`);
+        imgElements.forEach((img) => {
+          if (img.src === thumbnailUrl && img.complete && img.naturalHeight !== 0) {
+            checkedImagesRef.current.add(imageKey);
+            setImageLoadingStates((prev) => {
+              // Only update if not already set to false
+              if (prev[imageKey] !== false) {
+                return {
+                  ...prev,
+                  [imageKey]: false,
+                };
+              }
+              return prev;
+            });
+          }
+        });
+      });
+    }, 100); // Small delay to ensure DOM is updated
+
+    return () => clearTimeout(timeoutId);
+  }, [order?.items]);
+
   // Clear cart and show modal after order is confirmed as paid
   useEffect(() => {
     if (order && order.payment_status === 'paid') {
       const key = `cart_cleared_and_modal_shown_${order.order_number}`;
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, 'true');
+      // Use localStorage instead of sessionStorage so modal only shows once per order, ever
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, 'true');
 
         // Prevent CartContext from re-loading cart from backend in this session
         try {
@@ -136,7 +180,17 @@ const OrderConfirmation = () => {
 
       const data = await response.json();
       if (data.success && data.order) {
-        setOrder(data.order);
+        const newOrder = data.order;
+        setOrder(newOrder);
+        
+        // Only reset image loading states if order number actually changed
+        // Don't reset on every fetch (e.g., during polling)
+        if (order?.order_number !== newOrder.order_number) {
+          setImageLoadingStates({});
+          setImageErrorStates({});
+          checkedImagesRef.current.clear();
+
+        }
       } else {
         setError('Failed to load order details');
       }
@@ -369,6 +423,12 @@ const OrderConfirmation = () => {
         >
           <button
             onClick={() => navigate('/orders')}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f3f4f6';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#fff';
+            }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -379,6 +439,7 @@ const OrderConfirmation = () => {
               backgroundColor: '#fff',
               cursor: 'pointer',
               fontSize: '0.85rem',
+              transition: 'background-color 0.3s ease',
             }}
           >
             <span style={{ fontSize: '1rem' }}>←</span>
@@ -461,6 +522,10 @@ const OrderConfirmation = () => {
                   isPaid && item.download && item.download.download_token;
 
                 const thumbnailUrl = getProductImage(item.product);
+                const imageKey = `${item.id || index}_${item.product_id || index}`;
+                // Default to true (loading) if not set, false means loaded
+                const imageLoading = imageLoadingStates[imageKey] !== false;
+                const imageError = imageErrorStates[imageKey] === true;
 
                 return (
                   <div
@@ -492,21 +557,81 @@ const OrderConfirmation = () => {
                           fontWeight: 600,
                           color: '#6b7280',
                           textTransform: 'uppercase',
+                          position: 'relative',
                         }}
                       >
-                        {thumbnailUrl ? (
-                          <img
-                            src={thumbnailUrl}
-                            alt={item.product_name}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                            }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+                        {thumbnailUrl && !imageError ? (
+                          <>
+                            {imageLoading && (
+                              <div
+                                className="image-skeleton"
+                                style={{
+                                  position: 'absolute',
+                                  inset: 0,
+                                  background:
+                                    'linear-gradient(90deg, #f2f2f2 25%, #e5e5e5 50%, #f2f2f2 75%)',
+                                  backgroundSize: '200% 100%',
+                                  animation: 'shimmer 1.5s ease-in-out infinite',
+                                  zIndex: 1,
+                                }}
+                              />
+                            )}
+                            <img
+                              ref={(imgElement) => {
+                                // Check if image is already loaded (cached) when element is created
+                                // Only check once per image key to prevent infinite loops
+                                if (imgElement && !checkedImagesRef.current.has(imageKey)) {
+                                  checkedImagesRef.current.add(imageKey);
+                                  
+                                  // If image is already complete (cached), mark as loaded immediately
+                                  if (imgElement.complete && imgElement.naturalHeight !== 0) {
+                                    setImageLoadingStates((prev) => {
+                                      if (prev[imageKey] !== false) {
+                                        return {
+                                          ...prev,
+                                          [imageKey]: false,
+                                        };
+                                      }
+                                      return prev;
+                                    });
+                                  }
+                                }
+                              }}
+                              src={thumbnailUrl}
+                              alt={item.product_name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                opacity: imageLoading ? 0 : 1,
+                                transition: 'opacity 0.25s ease',
+                                position: 'relative',
+                                zIndex: 2,
+                              }}
+                              onLoad={() => {
+                                setImageLoadingStates((prev) => {
+                                  if (prev[imageKey] !== false) {
+                                    return {
+                                      ...prev,
+                                      [imageKey]: false,
+                                    };
+                                  }
+                                  return prev;
+                                });
+                              }}
+                              onError={(e) => {
+                                setImageLoadingStates((prev) => ({
+                                  ...prev,
+                                  [imageKey]: false,
+                                }));
+                                setImageErrorStates((prev) => ({
+                                  ...prev,
+                                  [imageKey]: true,
+                                }));
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </>
                         ) : (
                           (item.product_name || 'PR')
                             .slice(0, 2)
@@ -532,6 +657,12 @@ const OrderConfirmation = () => {
                           onClick={() =>
                             handleDirectDownload(item.download.download_token)
                           }
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#4b5563';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#000';
+                          }}
                           style={{
                             padding: '0.45rem 1rem',
                             backgroundColor: '#000',
@@ -541,6 +672,7 @@ const OrderConfirmation = () => {
                             fontSize: '0.8rem',
                             fontWeight: 600,
                             cursor: 'pointer',
+                            transition: 'background-color 0.3s ease',
                           }}
                         >
                           Download
@@ -563,6 +695,14 @@ const OrderConfirmation = () => {
         </div>
       </motion.div>
     </div>
+
+    {/* Shimmer animation for image skeleton loading */}
+    <style>{`
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+    `}</style>
     </>
   );
 };

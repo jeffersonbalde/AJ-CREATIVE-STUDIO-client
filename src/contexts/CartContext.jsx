@@ -29,15 +29,14 @@ export const CartProvider = ({ children }) => {
   const hasLoadedFromBackendRef = useRef(false);
   const hasMergedGuestCartRef = useRef(false);
   const prevAuthStateRef = useRef(isCustomerAuthenticated);
+  const prevCustomerTokenRef = useRef(customerToken);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-  // Load cart from backend when customer is authenticated
+  // Load cart from backend when customer is authenticated - SIMPLE VERSION
   useEffect(() => {
     const loadCartFromBackend = async () => {
-      // If we are currently on an order confirmation page, skip loading the
-      // cart from the backend on this mount. The order page itself will
-      // decide when and how to clear the cart after payment.
+      // Skip if on order confirmation page
       try {
         if (typeof window !== 'undefined') {
           const path = window.location.pathname || '';
@@ -46,25 +45,34 @@ export const CartProvider = ({ children }) => {
           }
         }
       } catch (e) {
-        // Ignore path detection errors
+        // Ignore
       }
 
-      // If we've explicitly decided to skip backend load for this session
-      // (legacy flag), do nothing.
-      try {
-        if (typeof window !== 'undefined') {
-          const skip = sessionStorage.getItem('skip_backend_cart_load');
-          if (skip === 'true') {
-            return;
-          }
-        }
-      } catch (e) {
-        // Ignore sessionStorage errors
-      }
-
-      if (!isCustomerAuthenticated || !customerToken || hasLoadedFromBackendRef.current) {
+      // Get token - check localStorage first (most reliable)
+      const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('customer_token') : null;
+      const effectiveToken = customerToken || tokenFromStorage;
+      
+      // SIMPLE CHECK: If authenticated + has token + haven't loaded = LOAD IT
+      if (!isCustomerAuthenticated || !effectiveToken) {
         return;
       }
+      
+      // If already loaded in this session, skip (unless token changed)
+      const tokenChanged = prevCustomerTokenRef.current !== effectiveToken;
+      if (hasLoadedFromBackendRef.current && !tokenChanged) {
+        return;
+      }
+      
+      // Token changed or first load - reset flags and load
+      if (tokenChanged) {
+        console.log('🔄 Token changed - reloading cart');
+        hasLoadedFromBackendRef.current = false;
+        hasMergedGuestCartRef.current = false;
+      }
+      
+      prevCustomerTokenRef.current = effectiveToken;
+      
+      console.log('🔄 LOADING CART FROM BACKEND...');
 
       try {
         setIsLoadingCart(true);
@@ -87,15 +95,18 @@ export const CartProvider = ({ children }) => {
         const response = await fetch(`${apiBaseUrl}${apiBaseUrl.includes('/api') ? '' : '/api'}/cart`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${customerToken}`,
+            'Authorization': `Bearer ${effectiveToken}`,
             'Accept': 'application/json',
           },
         });
 
         if (response.ok) {
           const data = await response.json();
+          console.log('Backend cart API response:', data);
+          
           if (data.success) {
             const backendCart = data.cart || [];
+            console.log('Backend cart array:', backendCart);
             
             // If there's a guest cart to merge (first time only), merge it
             if (shouldMergeGuestCart && !hasMergedGuestCartRef.current) {
@@ -106,20 +117,45 @@ export const CartProvider = ({ children }) => {
               localStorage.removeItem('cart_items');
             } else {
               // No merge needed, just load backend cart
+              console.log('📦 Backend cart loaded:', backendCart.length, 'items');
+              
+              // ALWAYS update state and localStorage - NO EXCEPTIONS
+              setCartItems(backendCart);
+              
+              // FORCE SAVE to localStorage - ALWAYS
               if (backendCart.length === 0) {
-                setCartItems([]);
                 localStorage.removeItem('cart_items');
+                console.log('✅ Cart empty - removed from localStorage');
               } else {
-                setCartItems(backendCart);
-                localStorage.setItem('cart_items', JSON.stringify(backendCart));
+                const cartJson = JSON.stringify(backendCart);
+                localStorage.setItem('cart_items', cartJson);
+                
+                // Verify immediately
+                const saved = localStorage.getItem('cart_items');
+                if (saved) {
+                  console.log('✅✅✅ CART SAVED TO LOCALSTORAGE! Items:', JSON.parse(saved).length);
+                } else {
+                  console.error('❌ FAILED TO SAVE TO LOCALSTORAGE!');
+                  // Retry once
+                  localStorage.setItem('cart_items', cartJson);
+                  console.log('🔄 Retried save');
+                }
               }
+              
               hasLoadedFromBackendRef.current = true;
             }
+          } else {
+            console.error('Backend cart API returned success=false:', data);
           }
         } else {
+          console.error('Backend cart API failed:', response.status, response.statusText);
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Error response:', errorData);
+          
           // If backend fails, keep guest cart if available (fallback)
           // But don't merge, just use guest cart as-is
           if (guestItems.length > 0) {
+            console.log('Using guest cart as fallback:', guestItems);
             setCartItems(guestItems);
           }
         }
@@ -134,18 +170,45 @@ export const CartProvider = ({ children }) => {
     loadCartFromBackend();
   }, [isCustomerAuthenticated, customerToken]);
 
-  // Reset flags and clear cart when customer logs out (not when simply not authenticated)
+  // Reset flags and clear cart when customer logs out (similar to token clearing)
   useEffect(() => {
     // Only clear cart if transitioning from authenticated to non-authenticated (actual logout)
     if (prevAuthStateRef.current === true && isCustomerAuthenticated === false) {
       hasLoadedFromBackendRef.current = false;
       hasMergedGuestCartRef.current = false;
-      // Clear cart when customer logs out
+      
+      // Clear cart from state and localStorage when customer logs out
       setCartItems([]);
-      localStorage.removeItem('cart_items');
+      try {
+        localStorage.removeItem('cart_items');
+      } catch (error) {
+        console.error('Error clearing cart on logout:', error);
+      }
     }
     // Update previous auth state
     prevAuthStateRef.current = isCustomerAuthenticated;
+  }, [isCustomerAuthenticated]);
+  
+  // Load cart from localStorage when user is not authenticated (guest mode)
+  // This only applies to new guest sessions, not after logout
+  useEffect(() => {
+    // Only load from localStorage if user is not authenticated, we haven't loaded from backend,
+    // and this is not a logout transition (prevAuthStateRef would be false initially)
+    if (!isCustomerAuthenticated && !hasLoadedFromBackendRef.current && prevAuthStateRef.current === false) {
+      try {
+        const savedCart = localStorage.getItem('cart_items');
+        if (savedCart) {
+          const guestCart = JSON.parse(savedCart);
+          setCartItems(guestCart);
+        } else {
+          // No saved cart, clear state
+          setCartItems([]);
+        }
+      } catch (error) {
+        console.error('Error loading guest cart:', error);
+        setCartItems([]);
+      }
+    }
   }, [isCustomerAuthenticated]);
 
   // Merge guest cart with backend cart (only called once on first login)
