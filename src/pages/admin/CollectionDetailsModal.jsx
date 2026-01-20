@@ -18,18 +18,27 @@ const CollectionDetailsModal = ({
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
+    // Reset state when collection changes
+    if (!collection || !collection.id) {
+      setCollectionData(null);
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
+
     // If we already have prefetched data, use it and skip network
-    if (prefetchedCollection) {
+    if (prefetchedCollection && prefetchedCollection.id === collection.id) {
       setCollectionData(prefetchedCollection);
       setProducts(prefetchedProducts || []);
       setLoading(false);
       return;
     }
 
-    // Fallback: fetch details when not prefetched
+    // Fetch details
     const fetchCollectionDetails = async () => {
       try {
         setLoading(true);
+        console.log(`Fetching collection details for ID: ${collection.id}`);
         const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -39,10 +48,18 @@ const CollectionDetailsModal = ({
 
         if (response.ok) {
           const data = await response.json();
+          console.log('Collection details response:', data);
           if (data.success && data.collection) {
             setCollectionData(data.collection);
-            setProducts(data.collection.products || []);
+            const products = data.collection.products || [];
+            setProducts(products);
+            console.log(`Loaded ${products.length} products for collection ${collection.id}`, products);
+          } else {
+            console.error('Invalid response structure:', data);
           }
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to fetch collection details:', response.status, errorText);
         }
       } catch (error) {
         console.error('Error fetching collection details:', error);
@@ -51,10 +68,8 @@ const CollectionDetailsModal = ({
       }
     };
 
-    if (collection && !prefetchedCollection) {
-      fetchCollectionDetails();
-    }
-  }, [collection, prefetchedCollection, prefetchedProducts, apiBaseUrl, token]);
+    fetchCollectionDetails();
+  }, [collection?.id, apiBaseUrl, token]);
 
   const handleBackdropClick = async (e) => {
     if (e.target === e.currentTarget) {

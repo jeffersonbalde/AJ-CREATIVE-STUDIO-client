@@ -1,4 +1,6 @@
 import React from 'react';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 
 import Navbar from './components/Navbar';
@@ -19,6 +21,7 @@ import ProductList from './pages/admin/ProductList';
 import ProductCategories from './pages/admin/ProductCategories';
 import ProductCollections from './pages/admin/ProductCollections';
 import LandingPageSections from './pages/admin/LandingPageSections';
+import SectionTypeAdmin from './pages/admin/content/SectionTypeAdmin';
 import CustomerList from './pages/admin/CustomerList';
 import TimeLogging from './pages/admin/TimeLogging';
 import OrderList from './pages/admin/OrderList';
@@ -139,6 +142,60 @@ const AppContent = () => {
                 </ProtectedRoute>
               }
             />
+            {/* Content Management Routes */}
+            <Route
+              path="/admin/content/hero"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><SectionTypeAdmin /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/content/products"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><SectionTypeAdmin /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/content/faq"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><SectionTypeAdmin /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/content/testimonials"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><SectionTypeAdmin /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/content/email-subscribe"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><SectionTypeAdmin /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/content/media"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout>
+                    <div className="container-fluid px-3 py-2">
+                      <h1>Media Library</h1>
+                      <p>Media Library coming soon...</p>
+                    </div>
+                  </SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/customers"
               element={
@@ -200,6 +257,19 @@ const AppContent = () => {
           </Routes>
         )}
       </div>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+        style={{ zIndex: 100005 }}
+      />
     </div>
   );
 };

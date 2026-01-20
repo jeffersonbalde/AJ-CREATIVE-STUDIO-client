@@ -1,16 +1,9 @@
-import React, { useRef, useState, useEffect } from 'react';
-import Hero from '../components/Hero';
-import DynamicProductSection from '../components/DynamicProductSection';
-import VideoTutorialsSection from '../components/VideoTutorialsSection';
-import HowItWorks from '../components/HowItWorks';
-import FAQ from '../components/FAQ';
-import Testimonials from '../components/Testimonials';
-import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+import React, { useState, useEffect } from 'react';
+import SectionRenderer from '../components/SectionRenderer';
 
 const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const Home = () => {
-  const swiperRef = useRef(null);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,43 +33,27 @@ const Home = () => {
     }
   };
 
-  const handleSlideChange = () => {
-    // We no longer show numeric pagination, but keep this
-    // callback in case we want analytics or future UI hooks.
-  };
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '3rem' }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Hero slider section */}
-      <Hero onSlideChange={handleSlideChange} swiperRef={swiperRef} />
-
-      {/* Dynamic Product Sections */}
-      {loading ? (
+      {sections.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem' }}>
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
+          <p>No sections available at the moment.</p>
         </div>
       ) : (
         sections.map((section) => (
-          <DynamicProductSection key={section.id} section={section} />
+          <SectionRenderer key={section.id} section={section} />
         ))
       )}
-
-      {/* Video Tutorials Section */}
-      <VideoTutorialsSection />
-
-      {/* How It Works Section */}
-      <HowItWorks />
-
-      {/* FAQ Section */}
-      <FAQ />
-
-      {/* Testimonials Section */}
-      <Testimonials />
-
-      {/* Email subscribe + payments + footer */}
-      <EmailSubscribeFooter />
     </div>
   );
 };

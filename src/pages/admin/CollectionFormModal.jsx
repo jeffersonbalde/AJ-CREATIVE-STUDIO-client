@@ -40,6 +40,9 @@ const CollectionFormModal = ({ collection, onClose, onSave, token, existingColle
 
   useEffect(() => {
     fetchAllProducts();
+  }, []);
+
+  useEffect(() => {
     if (collection) {
       const collectionFormState = {
         name: collection.name || '',
@@ -49,7 +52,39 @@ const CollectionFormModal = ({ collection, onClose, onSave, token, existingColle
       };
       setFormData(collectionFormState);
       initialFormState.current = { ...collectionFormState };
-      fetchCollectionProducts();
+      // Fetch collection products
+      if (collection.id) {
+        const fetchProducts = async () => {
+          try {
+            setProductsLoading(true);
+            const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json',
+              },
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.collection) {
+                const products = data.collection.products || [];
+                setCollectionProducts(products);
+                setSelectedProductIds(products.map(p => p.id));
+                console.log(`Loaded ${products.length} products for collection ${collection.id}`, products);
+              } else {
+                console.error('Invalid response structure:', data);
+              }
+            } else {
+              console.error('Failed to fetch collection products:', response.status, response.statusText);
+            }
+          } catch (error) {
+            console.error('Error fetching collection products:', error);
+          } finally {
+            setProductsLoading(false);
+          }
+        };
+        fetchProducts();
+      }
     } else {
       const defaultState = {
         name: '',
@@ -62,7 +97,7 @@ const CollectionFormModal = ({ collection, onClose, onSave, token, existingColle
       setCollectionProducts([]);
       setSelectedProductIds([]);
     }
-  }, [collection]);
+  }, [collection?.id, apiBaseUrl, token]);
 
   const fetchAllProducts = async () => {
     try {
@@ -88,8 +123,12 @@ const CollectionFormModal = ({ collection, onClose, onSave, token, existingColle
   };
 
   const fetchCollectionProducts = async () => {
-    if (!collection?.id) return;
+    if (!collection?.id) {
+      console.warn('Cannot fetch collection products: collection.id is missing');
+      return;
+    }
     try {
+      setProductsLoading(true);
       const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -99,14 +138,21 @@ const CollectionFormModal = ({ collection, onClose, onSave, token, existingColle
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.collection && data.collection.products) {
+        if (data.success && data.collection) {
           const products = data.collection.products || [];
           setCollectionProducts(products);
           setSelectedProductIds(products.map(p => p.id));
+          console.log(`Loaded ${products.length} products for collection ${collection.id}`);
+        } else {
+          console.error('Invalid response structure:', data);
         }
+      } else {
+        console.error('Failed to fetch collection products:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error fetching collection products:', error);
+    } finally {
+      setProductsLoading(false);
     }
   };
 

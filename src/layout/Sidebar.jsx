@@ -9,25 +9,26 @@ const Sidebar = ({ onCloseSidebar }) => {
   // Initialize expanded state based on current route
   const isOnProductsRoute = location.pathname.startsWith('/admin/products');
   const isOnCustomersRoute = location.pathname.startsWith('/admin/customers');
-  const isOnLandingPageSectionsRoute = location.pathname === '/admin/landing-page-sections';
+  const isOnContentRoute = location.pathname.startsWith('/admin/content');
   const [expandedItems, setExpandedItems] = useState({
-    products: isOnProductsRoute && !isOnLandingPageSectionsRoute,
-    customers: isOnCustomersRoute && !isOnLandingPageSectionsRoute,
+    products: isOnProductsRoute && !isOnContentRoute,
+    customers: isOnCustomersRoute && !isOnContentRoute,
+    contentmanagement: isOnContentRoute,
   });
 
   // Auto-expand/collapse parent based on current route
   useEffect(() => {
-    if (isOnLandingPageSectionsRoute) {
-      // Collapse Products and Customers menus when on Landing Page Sections
-      setExpandedItems(prev => ({ ...prev, products: false, customers: false }));
+    if (isOnContentRoute) {
+      // Expand Content Management and collapse others when on Content Management
+      setExpandedItems(prev => ({ ...prev, products: false, customers: false, contentmanagement: true }));
     } else if (isOnProductsRoute) {
       // Expand Products menu when on Products routes
-      setExpandedItems(prev => ({ ...prev, products: true, customers: false }));
+      setExpandedItems(prev => ({ ...prev, products: true, customers: false, contentmanagement: false }));
     } else if (isOnCustomersRoute) {
       // Expand Customers menu when on Customers routes
-      setExpandedItems(prev => ({ ...prev, products: false, customers: true }));
+      setExpandedItems(prev => ({ ...prev, products: false, customers: true, contentmanagement: false }));
     }
-  }, [location.pathname, isOnProductsRoute, isOnCustomersRoute, isOnLandingPageSectionsRoute]);
+  }, [location.pathname, isOnProductsRoute, isOnCustomersRoute, isOnContentRoute]);
   
   // Check if user is admin - STATIC CHECK (no DB lookup needed)
   // If we're authenticated and on admin routes, assume admin until proven otherwise
@@ -64,8 +65,8 @@ const Sidebar = ({ onCloseSidebar }) => {
 
   const handleLinkClick = (href) => {
     closeSidebarOnMobile();
-    // Collapse Products menu when clicking Landing Page Sections
-    if (href === '/admin/landing-page-sections') {
+    // Collapse Products and Customers menus when clicking Content Management items
+    if (href.startsWith('/admin/content')) {
       setExpandedItems(prev => ({ ...prev, products: false, customers: false }));
     }
   };
@@ -126,10 +127,48 @@ const Sidebar = ({ onCloseSidebar }) => {
             },
           ],
         },
+      ],
+    },
+    {
+      heading: "Content Management",
+      items: [
         {
-          icon: "fas fa-columns",
-          label: "Landing Page Sections",
-          href: "/admin/landing-page-sections",
+          icon: "fas fa-edit",
+          label: "Content Management",
+          href: "#",
+          hasChildren: true,
+          children: [
+            {
+              icon: "fas fa-images",
+              label: "Hero Slider",
+              href: "/admin/content/hero",
+            },
+            {
+              icon: "fas fa-box",
+              label: "Product Sections",
+              href: "/admin/content/products",
+            },
+            {
+              icon: "fas fa-question-circle",
+              label: "FAQ Sections",
+              href: "/admin/content/faq",
+            },
+            {
+              icon: "fas fa-star",
+              label: "Testimonials",
+              href: "/admin/content/testimonials",
+            },
+            {
+              icon: "fas fa-envelope",
+              label: "Email Subscribe",
+              href: "/admin/content/email-subscribe",
+            },
+            {
+              icon: "fas fa-images",
+              label: "Media Library",
+              href: "/admin/content/media",
+            },
+          ],
         },
       ],
     },
@@ -178,8 +217,8 @@ const Sidebar = ({ onCloseSidebar }) => {
       <div className="sb-sidenav-menu-heading">{section.heading}</div>
       {section.items.map((item, itemIndex) => {
         const isActive = isActiveLink(item.href) || (item.children && item.children.some(child => isActiveLink(child.href)));
-        const isExpanded = expandedItems[item.label.toLowerCase().replace(/\s+/g, '')] || false;
         const itemKey = item.label.toLowerCase().replace(/\s+/g, '');
+        const isExpanded = expandedItems[itemKey] || false;
 
         if (item.hasChildren && item.children) {
           return (

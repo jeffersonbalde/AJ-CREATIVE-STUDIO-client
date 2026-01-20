@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Portal from "../../components/Portal";
 import { FaLayerGroup, FaCalendarAlt, FaBox } from "react-icons/fa";
+import { useAuth } from "../../contexts/AuthContext";
 
 const LandingPageSectionDetailsModal = ({ 
   section, 
@@ -8,7 +9,12 @@ const LandingPageSectionDetailsModal = ({
   collections = [],
   products = [],
 }) => {
+  const { token } = useAuth();
   const [isClosing, setIsClosing] = useState(false);
+  // Initialize loading state to true if products aren't provided, false if they are
+  const [loadingProducts, setLoadingProducts] = useState(!products || products.length === 0);
+  const [modalProducts, setModalProducts] = useState(products);
+  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const handleBackdropClick = async (e) => {
     if (e.target === e.currentTarget) {
@@ -32,6 +38,78 @@ const LandingPageSectionDetailsModal = ({
       document.body.classList.remove("modal-open");
     };
   }, []);
+
+  // Update modalProducts when products prop changes
+  useEffect(() => {
+    if (products && products.length > 0) {
+      setModalProducts(products);
+      setLoadingProducts(false);
+    } else if (products && products.length === 0) {
+      // If products array is empty, we're done loading
+      setModalProducts([]);
+      setLoadingProducts(false);
+    }
+  }, [products]);
+
+  // Fetch products when modal opens if not already provided
+  useEffect(() => {
+    if (!section) return;
+
+    // If products are already provided and not empty, skip fetching
+    if (products && products.length > 0) {
+      return;
+    }
+
+    // Otherwise, fetch products
+    const fetchProducts = async () => {
+      if (!section.source_value || !collections || collections.length === 0) {
+        setModalProducts([]);
+        return;
+      }
+
+      setLoadingProducts(true);
+      try {
+        // Find the collection for this section
+        const collection = collections.find(c => 
+          c.slug === section.source_value || 
+          c.id?.toString() === section.source_value?.toString() ||
+          c.id === section.source_value
+        );
+
+        if (collection) {
+          const response = await fetch(`${apiBaseUrl}/product-collections/${collection.id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.collection) {
+              const collectionProducts = data.collection.products || [];
+              const limitedProducts = collectionProducts.slice(0, section.product_count || 10);
+              setModalProducts(limitedProducts);
+            } else {
+              setModalProducts([]);
+            }
+          } else {
+            console.error(`Failed to fetch collection ${collection.id}:`, response.status);
+            setModalProducts([]);
+          }
+        } else {
+          setModalProducts([]);
+        }
+      } catch (error) {
+        console.error(`Error fetching products for section ${section.id}:`, error);
+        setModalProducts([]);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, [section, collections, products, token, apiBaseUrl]);
 
   const closeModal = async () => {
     setIsClosing(true);
@@ -273,18 +351,25 @@ const LandingPageSectionDetailsModal = ({
                   <div className="card border-0 bg-white" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
                     <div className="card-header bg-transparent border-bottom">
                       <h6 className="mb-0 fw-semibold text-dark">
-                        <i className="fas fa-box me-2 text-primary"></i>Products in Section ({products.length})
+                        <i className="fas fa-box me-2 text-primary"></i>Products in Section ({loadingProducts ? '...' : modalProducts.length})
                       </h6>
                     </div>
                     <div className="card-body" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
-                      {products.length === 0 ? (
+                      {loadingProducts ? (
+                        <div className="text-center py-5">
+                          <div className="spinner-border text-primary mb-3" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                          <p className="text-muted mb-0">Loading products...</p>
+                        </div>
+                      ) : modalProducts.length === 0 ? (
                         <div className="text-center py-4">
                           <FaBox className="text-muted mb-2" size={48} />
                           <p className="text-muted mb-0">No products found in this section.</p>
                         </div>
                       ) : (
                         <div className="products-container-mobile">
-                          {products.map((product, index) => (
+                          {modalProducts.map((product, index) => (
                             <div
                               key={product.id}
                               className="d-flex align-items-center gap-3 p-3 mb-2 border rounded bg-white product-item-detail-mobile"
