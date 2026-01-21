@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, ToastContainer } from 'react-toastify';
@@ -188,6 +188,7 @@ const createDummyProduct = (slug) => {
     color: '#4CAF50',
     accentColor: '#2E7D32',
     slug: slug,
+    isDummy: true,
   };
 };
 
@@ -214,6 +215,10 @@ const ProductDetail = () => {
   const [emailAddress, setEmailAddress] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewStatusMessage, setReviewStatusMessage] = useState('');
+  const [reviewStatusType, setReviewStatusType] = useState('info');
+  const [activeReviewImage, setActiveReviewImage] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [filePreviews, setFilePreviews] = useState([]);
   const fileInputRef = useRef(null);
@@ -235,6 +240,10 @@ const ProductDetail = () => {
 
   const [product, setProduct] = useState(null);
   const [loadingProduct, setLoadingProduct] = useState(true);
+  const [productReviews, setProductReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [productFaqs, setProductFaqs] = useState([]);
+  const [faqsLoading, setFaqsLoading] = useState(false);
   
   // Check if mobile on mount and resize
   useEffect(() => {
@@ -354,7 +363,7 @@ const ProductDetail = () => {
         }
 
         if (apiProduct) {
-          setProduct(apiProduct);
+          setProduct({ ...apiProduct, isDummy: false });
           setCurrentImageIndex(0); // Reset to first image when product changes
         } else {
           // Fallback: create generic dummy product
@@ -372,9 +381,245 @@ const ProductDetail = () => {
     fetchProduct();
   }, [apiBaseUrl, slug]);
 
+  // Fetch reviews for product
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!product?.id || product?.isDummy) {
+        setProductReviews([]);
+        return;
+      }
+
+      try {
+        setReviewsLoading(true);
+        const response = await fetch(`${apiBaseUrl}/products/${product.id}/reviews`, {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          setProductReviews([]);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success && Array.isArray(data.reviews)) {
+          setProductReviews(data.reviews);
+        } else {
+          setProductReviews([]);
+        }
+      } catch (error) {
+        console.error('Error fetching product reviews:', error);
+        setProductReviews([]);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    fetchReviews();
+  }, [apiBaseUrl, product?.id, product?.isDummy]);
+
+  // Fetch FAQs for product
+  useEffect(() => {
+    const fetchFaqs = async () => {
+      if (!product?.id || product?.isDummy) {
+        setProductFaqs([]);
+        return;
+      }
+
+      try {
+        setFaqsLoading(true);
+        const response = await fetch(`${apiBaseUrl}/products/${product.id}/faqs`, {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          setProductFaqs([]);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success && Array.isArray(data.faqs)) {
+          setProductFaqs(data.faqs);
+        } else {
+          setProductFaqs([]);
+        }
+      } catch (error) {
+        console.error('Error fetching product FAQs:', error);
+        setProductFaqs([]);
+      } finally {
+        setFaqsLoading(false);
+      }
+    };
+
+    fetchFaqs();
+  }, [apiBaseUrl, product?.id, product?.isDummy]);
+
   const toggleFaq = (index) => {
     setExpandedFaq(expandedFaq === index ? null : index);
   };
+
+  const faqItems = useMemo(() => {
+    const safeProduct = product || {};
+
+    const dynamicItems = (productFaqs || [])
+      .slice()
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+      .map((item) => ({
+        question: item.question,
+        answer: (
+          <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
+            <MarkdownRenderer
+              content={item.answer}
+              style={{
+                fontSize: '0.95rem',
+                color: '#333',
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+        ),
+      }));
+
+    const descriptionItem = {
+      question: 'Description',
+      isDescription: true,
+      answer: (() => {
+        if (safeProduct.description) {
+          return (
+            <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
+              <MarkdownRenderer
+                content={safeProduct.description}
+                style={{
+                  fontSize: '0.95rem',
+                  color: '#333',
+                  lineHeight: 1.6,
+                }}
+              />
+            </div>
+          );
+        }
+
+        const desc = generateDescription(safeProduct);
+        return (
+          <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
+            {/* Intro Paragraph */}
+            <p style={{ marginBottom: '1rem' }}>
+              {desc.intro}
+            </p>
+            
+            {/* Demo File Link */}
+            <div style={{ marginBottom: '1rem' }}>
+              <span style={{ fontWeight: 700, color: '#000' }}>DEMO FILE HERE: </span>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  // Replace with actual demo file URL
+                  window.open('#', '_blank');
+                }}
+                style={{
+                  color: '#0066CC',
+                  textDecoration: 'underline',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#0052A3';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#0066CC';
+                }}
+              >
+                CLICK THIS LINK
+              </a>
+            </div>
+            
+            {/* Key Attributes */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
+                <span>Google Sheets Compatible | NOT compatible with MS Excel</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
+                <span>Instant Download</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
+                <span>Lifetime Access</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
+                <span>Mobile Compatible</span>
+              </div>
+            </div>
+            
+            {/* Features Section */}
+            <div style={{ marginBottom: '1rem' }}>
+              <strong style={{ fontSize: '0.95rem', textTransform: 'uppercase' }}>FEATURES:</strong>
+              <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                {desc.features.map((feature, idx) => (
+                  <li key={idx} style={{ marginBottom: '0.5rem' }}>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            {/* Additional Features */}
+            <div style={{ marginBottom: '1rem' }}>
+              <ul style={{ paddingLeft: '1.5rem' }}>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Custom project markups</strong> - allows for easy adjustments and additions for each phase/sub-phase.
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Automated Project Summary</strong> - track important project metrics such as bid price, cost breakdowns, total actual vs projected costs, etc.
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Cost Breakdowns</strong> - get a breakdown of total cost for each project phase or cost category for easy cost analysis.
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Project Cost Tracking</strong> - easily track projected costs vs actual costs for any project in real time.
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Intuitive charts and tables</strong> - for visual clarity.
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  <strong>Compatible with PC, mobile phones, and tablets</strong>
+                </li>
+              </ul>
+            </div>
+            
+            {/* Note */}
+            <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#FFF9E6', borderRadius: '4px', border: '1px solid #FFE082' }}>
+              <strong>NOTE: THIS DOCUMENT IS FOR GOOGLE SHEETS ONLY</strong> - this is NOT fully compatible with MS Excel.
+            </div>
+            
+            {/* Disclaimer */}
+            <div style={{ marginTop: '1.5rem' }}>
+              <strong style={{ fontSize: '0.95rem', textTransform: 'uppercase' }}>DISCLAIMER</strong>
+              <div style={{ marginTop: '0.5rem' }}>
+                <p style={{ marginBottom: '0.5rem' }}>
+                  This template is a digital product and all sales are final. No refunds.
+                </p>
+                <p style={{ marginBottom: '0.5rem' }}>
+                  You may not resell, redistribute, or share this template.
+                </p>
+                <p style={{ marginBottom: '0.5rem' }}>
+                  Personal or business use only for the original purchaser.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })(),
+    };
+
+    return [...dynamicItems, descriptionItem];
+  }, [productFaqs, product]);
 
   const paymentLogos = [
     { name: 'GCash', src: gcashLogo },
@@ -445,80 +690,153 @@ const ProductDetail = () => {
   };
   
 
-  const reviews = [
-    {
-      id: 1,
-      name: 'Anonymous',
-      rating: 5,
-      title: 'convenient and easy to',
-      text: 'convenient and easy to use.',
-      date: '10/18/2025',
-      verified: true,
-    },
-    {
-      id: 2,
-      name: 'Anonymous',
-      rating: 5,
-      title: '',
-      text: 'User friendly.',
-      date: '09/22/2025',
-      verified: true,
-    },
-    {
-      id: 3,
-      name: 'JRV A.',
-      rating: 5,
-      title: '5 STARS! Very helpful',
-      text: 'Helped me keep my bookings and expenses organized. Highly recommended.',
-      date: '09/08/2025',
-      verified: false,
-    },
-    {
-      id: 4,
-      name: 'L.K.',
-      rating: 5,
-      title: 'Super useful',
-      text: 'I liked it so much that I grabbed more templates from AJ Creative Studio.',
-      date: '10/08/2024',
-      verified: false,
-    },
-    {
-      id: 5,
-      name: 'Anonymous',
-      rating: 5,
-      title: '',
-      text: 'Great product!',
-      date: '08/15/2024',
-      verified: true,
-    },
-    {
-      id: 6,
-      name: 'Anonymous',
-      rating: 5,
-      title: '',
-      text: 'Very helpful template.',
-      date: '07/20/2024',
-      verified: true,
-    },
-  ];
+  const reviews = useMemo(() => {
+    return (productReviews || []).map((review) => {
+      const createdAt = review.created_at ? new Date(review.created_at) : null;
+      return {
+        id: review.id,
+        name: review.name || 'Anonymous',
+        rating: Number(review.rating || 0),
+        title: review.title || '',
+        text: review.content || '',
+        date: createdAt ? createdAt.toLocaleDateString() : '',
+        createdAt: review.created_at || null,
+        verified: review.status === 'approved' && review.is_active === true,
+        imageUrls: review.image_urls || [],
+      };
+    });
+  }, [productReviews]);
+
+  const sortedReviews = useMemo(() => {
+    const list = [...reviews];
+    if (selectedSort === 'Highest Rating') {
+      list.sort((a, b) => b.rating - a.rating);
+    } else if (selectedSort === 'Lowest Rating') {
+      list.sort((a, b) => a.rating - b.rating);
+    } else {
+      list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    }
+    return list;
+  }, [reviews, selectedSort]);
 
   // Calculate average rating and star distribution
-  const averageRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
   const totalReviews = reviews.length;
+  const averageRating = totalReviews > 0
+    ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews
+    : 0;
   const starDistribution = [5, 4, 3, 2, 1].map(star => ({
     stars: star,
     count: reviews.filter(r => r.rating === star).length,
   }));
   
   // Pagination logic
-  const totalPages = Math.ceil(reviews.length / reviewsPerPage);
+  const totalPages = Math.ceil(sortedReviews.length / reviewsPerPage);
   const indexOfLastReview = currentPage * reviewsPerPage;
   const indexOfFirstReview = indexOfLastReview - reviewsPerPage;
-  const paginatedReviews = reviews.slice(indexOfFirstReview, indexOfLastReview);
+  const paginatedReviews = sortedReviews.slice(indexOfFirstReview, indexOfLastReview);
   
   const handlePageChange = (page) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSubmitReview = async () => {
+    if (reviewSubmitting) return;
+
+    const errors = {};
+    if (reviewRating === 0) {
+      errors.rating = 'Rating is required';
+    }
+    if (!reviewTitle.trim()) {
+      errors.title = 'Review title is required';
+    }
+    if (!reviewContent.trim()) {
+      errors.content = 'Review content is required';
+    }
+    if (!displayName.trim()) {
+      errors.displayName = 'Display name is required';
+    }
+    if (!emailAddress.trim()) {
+      errors.email = 'Email address is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    setValidationErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setReviewStatusType('error');
+      setReviewStatusMessage('Please complete all required fields.');
+      return;
+    }
+
+    if (!product?.id || product?.isDummy) {
+      toast.error('Unable to submit review for this product.');
+      setReviewStatusType('error');
+      setReviewStatusMessage('Unable to submit review for this product.');
+      return;
+    }
+
+    try {
+      setReviewSubmitting(true);
+      setReviewStatusMessage('');
+      const formData = new FormData();
+      formData.append('product_id', product.id);
+      formData.append('rating', reviewRating);
+      formData.append('title', reviewTitle.trim());
+      formData.append('content', reviewContent.trim());
+      formData.append('name', displayName.trim());
+      formData.append('email', emailAddress.trim());
+      uploadedFiles
+        .filter((file) => file.type.startsWith('image/'))
+        .forEach((file) => {
+          formData.append('images[]', file);
+        });
+
+      const response = await fetch(`${apiBaseUrl}/product-reviews`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to submit review.');
+      }
+
+      toast.success(data?.message || 'Review submitted.');
+      setReviewStatusType('success');
+      setReviewStatusMessage(data?.message || 'Review submitted and pending approval.');
+      setReviewSubmitted(true);
+      // Clean up preview URLs before clearing
+      filePreviews.forEach((url) => {
+        if (url) URL.revokeObjectURL(url);
+      });
+      setUploadedFiles([]);
+      setFilePreviews([]);
+
+      // Scroll to Customer Reviews section so the title and refresh button are visible
+      setTimeout(() => {
+        if (customerReviewsSectionRef.current) {
+          const element = customerReviewsSectionRef.current;
+          const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+          const offsetPosition = elementPosition - 150;
+
+          window.scrollTo({
+            top: Math.max(0, offsetPosition),
+            behavior: 'smooth'
+          });
+        }
+      }, 400);
+    } catch (error) {
+      console.error('Review submit error:', error);
+      toast.error(error.message || 'Unable to submit review.');
+      setReviewStatusType('error');
+      setReviewStatusMessage(error.message || 'Unable to submit review.');
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   if (loadingProduct || !product) {
@@ -1216,191 +1534,17 @@ const ProductDetail = () => {
                 viewport={{ once: false, margin: '-100px' }}
                 transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               >
-                {[
-                  {
-                    question: 'Do you have a Demo File?',
-                    answer: (
-                      <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
-                        Yes! We provide demo files for most of our templates. You can preview the demo file before purchasing to ensure it meets your needs. Demo files are read-only versions that showcase the template's features and functionality.
-                      </div>
-                    ),
-                  },
-                  {
-                    question: 'Does it work with Excel, Google Sheets, or both?',
-                    answer: (
-                      <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
-                        Your purchase <strong>ONLY</strong> works with Google Sheets. The template is <strong>NOT</strong> compatible with MS Excel.
-                      </div>
-                    ),
-                  },
-                  {
-                    question: 'How to Access?',
-                    answer: (
-                      <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
-                        <ol style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
-                          <li style={{ marginBottom: '0.5rem' }}>
-                            Once your purchase has been confirmed, you will receive an email with the link to access the files.
-                          </li>
-                          <li style={{ marginBottom: '0.5rem' }}>
-                            Download the PDF File.
-                          </li>
-                          <li style={{ marginBottom: '0.5rem' }}>
-                            The PDF will contain a link to the Google Sheet.
-                          </li>
-                          <li style={{ marginBottom: '0.5rem' }}>
-                            Open the link and begin accessing your files!
-                          </li>
-                        </ol>
-                        <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#FFF9E6', borderRadius: '4px', border: '1px solid #FFE082' }}>
-                          <strong>NOTE:</strong> Make sure you have a GMAIL ACCOUNT. If you are using a phone/tablet, please also make sure to install the Google Sheets app first.
-                        </div>
-                      </div>
-                    ),
-                  },
-                  {
-                    question: 'Description',
-                    isDescription: true,
-                    answer: (() => {
-                      // Use custom description if available, otherwise generate one
-                      if (product.description) {
-                        return (
-                          <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
-                            <MarkdownRenderer
-                              content={product.description}
-                              style={{
-                                fontSize: '0.95rem',
-                                color: '#333',
-                                lineHeight: 1.6,
-                              }}
-                            />
-                          </div>
-                        );
-                      }
-                      
-                      // Fallback to generated description
-                      const desc = generateDescription(product);
-                      return (
-                        <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6, paddingTop: '0.5rem' }}>
-                          {/* Intro Paragraph */}
-                          <p style={{ marginBottom: '1rem' }}>
-                            {desc.intro}
-                          </p>
-                          
-                          {/* Demo File Link */}
-                          <div style={{ marginBottom: '1rem' }}>
-                            <span style={{ fontWeight: 700, color: '#000' }}>DEMO FILE HERE: </span>
-                            <a
-                              href="#"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                // Replace with actual demo file URL
-                                window.open('#', '_blank');
-                              }}
-                              style={{
-                                color: '#0066CC',
-                                textDecoration: 'underline',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = '#0052A3';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = '#0066CC';
-                              }}
-                            >
-                              CLICK THIS LINK
-                            </a>
-                          </div>
-                          
-                          {/* Key Attributes */}
-                          <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
-                              <span>Google Sheets Compatible | NOT compatible with MS Excel</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
-                              <span>Instant Download</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
-                              <span>Lifetime Access</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                              <span style={{ color: '#FFC107', fontSize: '1rem' }}>★</span>
-                              <span>Mobile Compatible</span>
-                            </div>
-                          </div>
-                          
-                          {/* Features Section */}
-                          <div style={{ marginBottom: '1rem' }}>
-                            <strong style={{ fontSize: '0.95rem', textTransform: 'uppercase' }}>FEATURES:</strong>
-                            <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                              {desc.features.map((feature, idx) => (
-                                <li key={idx} style={{ marginBottom: '0.5rem' }}>
-                                  {feature}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          
-                          {/* Additional Features */}
-                          <div style={{ marginBottom: '1rem' }}>
-                            <ul style={{ paddingLeft: '1.5rem' }}>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Custom project markups</strong> - allows for easy adjustments and additions for each phase/sub-phase.
-                              </li>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Automated Project Summary</strong> - track important project metrics such as bid price, cost breakdowns, total actual vs projected costs, etc.
-                              </li>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Cost Breakdowns</strong> - get a breakdown of total cost for each project phase or cost category for easy cost analysis.
-                              </li>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Project Cost Tracking</strong> - easily track projected costs vs actual costs for any project in real time.
-                              </li>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Intuitive charts and tables</strong> - for visual clarity.
-                              </li>
-                              <li style={{ marginBottom: '0.5rem' }}>
-                                <strong>Compatible with PC, mobile phones, and tablets</strong>
-                              </li>
-                            </ul>
-                          </div>
-                          
-                          {/* Note */}
-                          <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#FFF9E6', borderRadius: '4px', border: '1px solid #FFE082' }}>
-                            <strong>NOTE: THIS DOCUMENT IS FOR GOOGLE SHEETS ONLY</strong> - this is NOT fully compatible with MS Excel.
-                          </div>
-                          
-                          {/* Disclaimer */}
-                          <div style={{ marginTop: '1.5rem' }}>
-                            <strong style={{ fontSize: '0.95rem', textTransform: 'uppercase' }}>DISCLAIMER</strong>
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <p style={{ marginBottom: '0.5rem' }}>
-                                THIS IS A DIGITAL ITEM AND YOU WILL NOT RECEIVE ANY PHYSICAL PRODUCT.
-                              </p>
-                              <p style={{ marginBottom: '0.5rem' }}>
-                                Your file will be ready to download immediately after your payment has been confirmed.
-                              </p>
-                              <p style={{ marginBottom: '0.5rem' }}>
-                                This product is for <strong>PERSONAL USE ONLY</strong>. Reselling or sharing is not permitted.
-                              </p>
-                              <p style={{ marginBottom: '0.5rem' }}>
-                                Due to the nature of the digital product, no returns, exchanges or cancellations are accepted.
-                              </p>
-                              <p>
-                                If you do have any problems or questions about the product, please feel free to message us on FB.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })(),
-                  },
-                ].map((faq, index) => (
-                  <div key={index}>
+                {faqsLoading ? (
+                  <div style={{ padding: '1rem', fontSize: '0.95rem', color: '#666' }}>
+                    Loading FAQs...
+                  </div>
+                ) : faqItems.length === 0 ? (
+                  <div style={{ padding: '1rem', fontSize: '0.95rem', color: '#666' }}>
+                    No FAQs available yet.
+                  </div>
+                ) : (
+                  faqItems.map((faq, index) => (
+                    <div key={index}>
                     <button
                       type="button"
                       onClick={() => toggleFaq(index)}
@@ -1412,7 +1556,7 @@ const ProductDetail = () => {
                         padding: '1rem',
                         backgroundColor: '#FFFFFF',
                         border: 'none',
-                        borderBottom: index < 3 ? '1px solid #E0E0E0' : 'none',
+                        borderBottom: index < faqItems.length - 1 ? '1px solid #E0E0E0' : 'none',
                         cursor: 'pointer',
                         textAlign: 'left',
                         transition: 'background-color 0.2s ease',
@@ -1483,8 +1627,9 @@ const ProductDetail = () => {
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </div>
-                ))}
+                    </div>
+                  ))
+                )}
               </motion.div>
 
               {/* Share Button and Review Count - Outside Description Dropdown */}
@@ -1571,7 +1716,11 @@ const ProductDetail = () => {
         {/* Customer Reviews Section - Same Width as Main Content */}
         <motion.div
           ref={customerReviewsSectionRef}
-          style={{ maxWidth: '1100px', margin: '3.5rem auto', padding: '0 1rem' }}
+          style={{
+            maxWidth: '1100px',
+            margin: isMobile ? '2.5rem auto' : '3.5rem auto',
+            padding: isMobile ? '0 0.75rem' : '0 1rem'
+          }}
           className="customer-reviews-section"
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -1602,11 +1751,11 @@ const ProductDetail = () => {
             className="rating-summary-section"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'auto 1fr auto',
-              gap: '2.5rem',
+              gridTemplateColumns: isMobile ? '1fr' : 'auto 1fr auto',
+              gap: isMobile ? '1.5rem' : '2.5rem',
               alignItems: 'flex-start',
-              marginBottom: '2rem',
-              paddingBottom: '2rem',
+              marginBottom: isMobile ? '1.5rem' : '2rem',
+              paddingBottom: isMobile ? '1.5rem' : '2rem',
               borderBottom: '1px solid #E0E0E0',
             }}
             initial={{ opacity: 0, y: 20 }}
@@ -1615,7 +1764,7 @@ const ProductDetail = () => {
             transition={{ duration: 1.0, ease: [0.16, 1, 0.3, 1] }}
           >
             {/* Overall Rating (Left) */}
-            <div className="overall-rating-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '140px' }}>
+            <div className="overall-rating-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: isMobile ? 'auto' : '140px' }}>
               <div className="overall-rating-stars" style={{ display: 'flex', gap: '0.2rem', marginBottom: '0.75rem' }}>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <svg
@@ -1640,13 +1789,13 @@ const ProductDetail = () => {
             </div>
 
             {/* Star Rating Breakdown (Center) */}
-            <div className="star-breakdown-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'flex-start' }}>
+            <div className="star-breakdown-section" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'flex-start', width: isMobile ? '100%' : 'auto' }}>
               {starDistribution.map(({ stars, count }) => {
                 const maxCount = Math.max(...starDistribution.map(s => s.count), 1);
                 const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
                 return (
                   <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ display: 'flex', gap: '0.15rem', minWidth: '100px', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '0.15rem', minWidth: isMobile ? '80px' : '100px', flexShrink: 0 }}>
                       {[1, 2, 3, 4, 5].map((star) => (
                         <svg
                           key={star}
@@ -1661,7 +1810,7 @@ const ProductDetail = () => {
                         </svg>
                       ))}
                     </div>
-                    <div style={{ position: 'relative', flex: 1, height: '10px', backgroundColor: '#E0E0E0', borderRadius: '2px', minWidth: '100px', maxWidth: '250px' }}>
+                    <div style={{ position: 'relative', flex: 1, height: '10px', backgroundColor: '#E0E0E0', borderRadius: '2px', minWidth: isMobile ? '80px' : '100px', maxWidth: isMobile ? '100%' : '250px' }}>
                       {count > 0 && (
                         <div
                           style={{
@@ -1685,7 +1834,7 @@ const ProductDetail = () => {
             </div>
 
             {/* Write a review Button (Right) */}
-            <div className="write-review-button-wrapper" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
+            <div className="write-review-button-wrapper" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: isMobile ? 'center' : 'flex-end', marginTop: isMobile ? '0.5rem' : 0 }}>
               <motion.button
                 whileHover={{ y: -2, backgroundColor: '#FFC700' }}
                 whileTap={{ y: 0 }}
@@ -1716,12 +1865,12 @@ const ProductDetail = () => {
                   }
                 }}
                 style={{
-                  padding: '0.75rem 2rem',
+                  padding: isMobile ? '0.65rem 1.5rem' : '0.75rem 2rem',
                   backgroundColor: '#FFD700',
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '4px',
-                  fontSize: '1rem',
+                  fontSize: isMobile ? '0.95rem' : '1rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
@@ -1802,19 +1951,7 @@ const ProductDetail = () => {
                         marginLeft: 'auto',
                         marginRight: 'auto'
                       }}>
-                        Thank you! Your review will be published as soon as it is approved by the shop admin. You can remove or edit your review by logging into{' '}
-                        <a 
-                          href="https://judge.me" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          style={{ 
-                            color: '#FFD700', 
-                            textDecoration: 'underline',
-                            fontWeight: 500
-                          }}
-                        >
-                          Judge.me
-                        </a>
+                        Thank you! Your review will be published as soon as it is approved by the shop admin.
                       </p>
                     </div>
                   ) : (
@@ -1963,12 +2100,12 @@ const ProductDetail = () => {
                   {/* Picture Upload */}
                   <div style={{ marginBottom: '1.5rem' }}>
                     <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 500, marginBottom: '0.75rem', color: '#333', textAlign: 'center' }}>
-                      Picture/Video (optional)
+                      Photos (optional)
                     </label>
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*,video/*"
+                      accept="image/*"
                       multiple
                       style={{ display: 'none' }}
                       onChange={(e) => {
@@ -1977,9 +2114,9 @@ const ProductDetail = () => {
                         const validPreviews = [];
                         
                         files.forEach(file => {
-                          // Check if file is an image or video
-                          if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-                            toast.error(`${file.name} is not an image or video file. Only images and videos are allowed.`);
+                          // Check if file is an image
+                          if (!file.type.startsWith('image/')) {
+                            toast.error(`${file.name} is not an image file. Only images are allowed.`);
                             return;
                           }
                           
@@ -1992,27 +2129,14 @@ const ProductDetail = () => {
                           
                           // File is valid
                           validFiles.push(file);
-                          // Only create preview URL for images (videos will show an icon)
-                          if (file.type.startsWith('image/')) {
-                            validPreviews.push(URL.createObjectURL(file));
-                          } else {
-                            validPreviews.push(null); // Video placeholder
-                          }
+                          validPreviews.push(URL.createObjectURL(file));
                         });
                         
                         if (validFiles.length > 0) {
                           setUploadedFiles(prev => [...prev, ...validFiles]);
                           setFilePreviews(prev => [...prev, ...validPreviews]);
-                          const imageCount = validFiles.filter(f => f.type.startsWith('image/')).length;
-                          const videoCount = validFiles.filter(f => f.type.startsWith('video/')).length;
-                          let message = '';
-                          if (imageCount > 0 && videoCount > 0) {
-                            message = `${imageCount} image${imageCount !== 1 ? 's' : ''} and ${videoCount} video${videoCount !== 1 ? 's' : ''} uploaded successfully`;
-                          } else if (imageCount > 0) {
-                            message = `${imageCount} image${imageCount !== 1 ? 's' : ''} uploaded successfully`;
-                          } else {
-                            message = `${videoCount} video${videoCount !== 1 ? 's' : ''} uploaded successfully`;
-                          }
+                          const imageCount = validFiles.length;
+                          const message = `${imageCount} image${imageCount !== 1 ? 's' : ''} uploaded successfully`;
                           if (validFiles.length === files.length) {
                             toast.success(message);
                           }
@@ -2073,7 +2197,7 @@ const ProductDetail = () => {
                             e.currentTarget.style.transform = 'scale(1)';
                           }}
                         >
-                          {file.type.startsWith('image/') && filePreviews[index] ? (
+                          {filePreviews[index] ? (
                             <>
                               <img
                                 src={filePreviews[index]}
@@ -2106,73 +2230,6 @@ const ProductDetail = () => {
                                   if (filePreviews[index]) {
                                     URL.revokeObjectURL(filePreviews[index]);
                                   }
-                                  toast.info(`${file.name} removed`);
-                                }}
-                                style={{
-                                  position: 'absolute',
-                                  top: '4px',
-                                  right: '4px',
-                                  background: 'rgba(0, 0, 0, 0.6)',
-                                  color: '#FFFFFF',
-                                  border: 'none',
-                                  borderRadius: '50%',
-                                  width: '24px',
-                                  height: '24px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  lineHeight: '1',
-                                  padding: '0',
-                                  transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 0, 0, 0.8)';
-                                  e.currentTarget.style.transform = 'scale(1.1)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(0, 0, 0, 0.6)';
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                }}
-                              >
-                                ×
-                              </button>
-                            </>
-                          ) : file.type.startsWith('video/') ? (
-                            <>
-                              <div
-                                style={{
-                                  width: '150px',
-                                  height: '120px',
-                                  borderRadius: '4px',
-                                  border: '2px solid #E0E0E0',
-                                  backgroundColor: '#000',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.borderColor = '#FFD700';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.borderColor = '#E0E0E0';
-                                }}
-                              >
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <polygon points="5 3 19 12 5 21 5 3" />
-                                </svg>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newFiles = uploadedFiles.filter((_, i) => i !== index);
-                                  const newPreviews = filePreviews.filter((_, i) => i !== index);
-                                  setUploadedFiles(newFiles);
-                                  setFilePreviews(newPreviews);
                                   toast.info(`${file.name} removed`);
                                 }}
                                 style={{
@@ -2427,6 +2484,23 @@ const ProductDetail = () => {
                       alignItems: 'center',
                       flexWrap: 'wrap'
                     }}>
+                      {reviewStatusMessage && (
+                        <div
+                          style={{
+                            width: '100%',
+                            textAlign: 'center',
+                            fontSize: '0.9rem',
+                            color:
+                              reviewStatusType === 'success'
+                                ? '#1f7a1f'
+                                : reviewStatusType === 'error'
+                                  ? '#b00020'
+                                  : '#333333',
+                          }}
+                        >
+                          {reviewStatusMessage}
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -2469,51 +2543,7 @@ const ProductDetail = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          // Validate form fields
-                          const errors = {};
-                          
-                          if (reviewRating === 0) {
-                            errors.rating = 'Rating is required';
-                          }
-                          if (!reviewTitle.trim()) {
-                            errors.title = 'Review title is required';
-                          }
-                          if (!reviewContent.trim()) {
-                            errors.content = 'Review content is required';
-                          }
-                          if (!displayName.trim()) {
-                            errors.displayName = 'Display name is required';
-                          }
-                          if (!emailAddress.trim()) {
-                            errors.email = 'Email address is required';
-                          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress)) {
-                            errors.email = 'Please enter a valid email address';
-                          }
-                          
-                          setValidationErrors(errors);
-                          
-                          // If no errors, submit the form
-                          if (Object.keys(errors).length === 0) {
-                            console.log('Review submitted:', { reviewRating, reviewTitle, reviewContent, displayName, emailAddress, uploadedFiles });
-                            setReviewSubmitted(true);
-                            // Clean up preview URLs before clearing
-                            filePreviews.forEach(url => {
-                              if (url) URL.revokeObjectURL(url);
-                            });
-                            // Scroll to Customer Reviews section so the title and refresh button are visible
-                            setTimeout(() => {
-                              if (customerReviewsSectionRef.current) {
-                                const element = customerReviewsSectionRef.current;
-                                const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
-                                const offsetPosition = elementPosition - 150; // Larger offset to show the "Customer Reviews" title
-                                
-                                window.scrollTo({
-                                  top: Math.max(0, offsetPosition),
-                                  behavior: 'smooth'
-                                });
-                              }
-                            }, 400);
-                          }
+                          handleSubmitReview();
                         }}
                         style={{
                           padding: '0.75rem 1.5rem',
@@ -2526,7 +2556,9 @@ const ProductDetail = () => {
                           cursor: 'pointer',
                           transition: 'all 0.2s',
                           minWidth: '140px',
+                          opacity: reviewSubmitting ? 0.7 : 1,
                         }}
+                        disabled={reviewSubmitting}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = '#FFC700';
                         }}
@@ -2534,7 +2566,7 @@ const ProductDetail = () => {
                           e.currentTarget.style.backgroundColor = '#FFD700';
                         }}
                       >
-                        Submit Review
+                        {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
                       </button>
                     </div>
                   )}
@@ -2638,7 +2670,15 @@ const ProductDetail = () => {
               gap: '1.5rem',
             }}
           >
-            {paginatedReviews.map((review, index) => (
+            {reviewsLoading ? (
+              <div style={{ textAlign: 'center', color: '#666', padding: '1rem 0' }}>
+                Loading reviews...
+              </div>
+            ) : paginatedReviews.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#666', padding: '1rem 0' }}>
+                No reviews yet. Be the first to write one.
+              </div>
+            ) : paginatedReviews.map((review, index) => (
               <div
                 key={review.id}
                 style={{
@@ -2664,7 +2704,7 @@ const ProductDetail = () => {
           </div>
 
                 {/* Reviewer Info and Date */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: isMobile ? '0.35rem' : 0, marginBottom: '0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     {/* User Icon */}
                     <div style={{ position: 'relative', width: '32px', height: '32px' }}>
@@ -2743,6 +2783,42 @@ const ProductDetail = () => {
                 <div style={{ fontSize: '0.95rem', color: '#333', lineHeight: 1.6 }}>
                   {review.text}
                 </div>
+                {review.imageUrls && review.imageUrls.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                      marginTop: '0.75rem',
+                    }}
+                  >
+                    {review.imageUrls.map((url, imgIndex) => (
+                      <div
+                        key={imgIndex}
+                        style={{
+                          width: '90px',
+                          height: '70px',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          border: '1px solid #E0E0E0',
+                        }}
+                      >
+                        <img
+                          src={url}
+                          alt={`Review ${review.id} image ${imgIndex + 1}`}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                            cursor: 'zoom-in',
+                          }}
+                          onClick={() => setActiveReviewImage(url)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2822,6 +2898,65 @@ const ProductDetail = () => {
             </div>
           )}
         </motion.div>
+        {activeReviewImage && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '1.5rem',
+            }}
+            onClick={() => setActiveReviewImage(null)}
+          >
+            <div
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                position: 'relative',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={activeReviewImage}
+                alt="Review attachment"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  maxHeight: '90vh',
+                  objectFit: 'contain',
+                  borderRadius: '8px',
+                  backgroundColor: '#000',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setActiveReviewImage(null)}
+                style={{
+                  position: 'absolute',
+                  top: '-12px',
+                  right: '-12px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  border: 'none',
+                  backgroundColor: '#fff',
+                  color: '#000',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
 

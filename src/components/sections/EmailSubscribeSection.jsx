@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import gcashLogo from '../../assets/images/gcash-logo.jpg';
 import mayaLogo from '../../assets/images/maya-logo.png';
 import grabPayLogo from '../../assets/images/grabpay-logo.png';
@@ -9,7 +10,11 @@ import sevenElevenLogo from '../../assets/images/7eleven-logo.png';
 
 const EmailSubscribeSection = ({ config, section }) => {
   const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState('info');
   const location = useLocation();
+  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   const footerLinks = [
     'Browse Templates',
@@ -35,12 +40,44 @@ const EmailSubscribeSection = ({ config, section }) => {
   const backgroundColor = config.backgroundColor || '#F3F3F3';
   const subscribeBackgroundColor = config.subscribeBackgroundColor || '#FDD238';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle email subscription
-    console.log('Subscribe:', email);
-    // TODO: Implement actual subscription logic
-    setEmail('');
+    if (!email.trim() || submitting) return;
+    try {
+      setSubmitting(true);
+      setStatusMessage('');
+      const response = await fetch(`${apiBaseUrl}/email-subscribers`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Subscription failed');
+      }
+
+      if (data?.already_subscribed) {
+        toast.info('You are already subscribed.');
+        setStatusType('info');
+        setStatusMessage('You are already subscribed.');
+      } else {
+        toast.success('Thanks for subscribing!');
+        setStatusType('success');
+        setStatusMessage('Thanks for subscribing!');
+      }
+      setEmail('');
+    } catch (error) {
+      console.error('Subscribe error:', error);
+      toast.error(error.message || 'Unable to subscribe.');
+      setStatusType('error');
+      setStatusMessage(error.message || 'Unable to subscribe.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -114,6 +151,7 @@ const EmailSubscribeSection = ({ config, section }) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={submitting}
               style={{
                 flex: 1,
                 padding: '0.7rem 0.85rem',
@@ -135,6 +173,7 @@ const EmailSubscribeSection = ({ config, section }) => {
             />
             <button
               type="submit"
+              disabled={submitting}
               style={{
                 padding: '0.7rem 1rem',
                 borderRadius: '0 4px 4px 0',
@@ -142,35 +181,84 @@ const EmailSubscribeSection = ({ config, section }) => {
                 borderLeft: 'none',
                 backgroundColor: '#000',
                 color: '#FFFFFF',
-                cursor: 'pointer',
+                cursor: submitting ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'background-color 0.2s ease, border-color 0.2s ease',
                 boxShadow: 'none',
                 transform: 'none',
+                opacity: submitting ? 0.7 : 1,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#333333';
-                e.currentTarget.style.borderColor = '#111111';
+                if (!submitting) {
+                  e.currentTarget.style.backgroundColor = '#333333';
+                  e.currentTarget.style.borderColor = '#111111';
+                }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = '#000000';
                 e.currentTarget.style.borderColor = '#CCCCCC';
               }}
             >
-              <span
-                style={{
-                  display: 'inline-block',
-                  transform: 'translateX(1px)',
-                  fontSize: '1.3rem',
-                  fontWeight: 600,
-                }}
-              >
-                {buttonText}
-              </span>
+              {submitting ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '1.1rem',
+                    height: '1.1rem',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '1.1rem',
+                      height: '1.1rem',
+                      borderRadius: '999px',
+                      border: '2px solid rgba(255,255,255,0.5)',
+                      borderTopColor: '#FFFFFF',
+                      animation: 'emailSubscribeSpin 0.8s linear infinite',
+                      display: 'inline-block',
+                    }}
+                  />
+                </span>
+              ) : (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    transform: 'translateX(1px)',
+                    fontSize: '1.3rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {buttonText}
+                </span>
+              )}
             </button>
           </motion.form>
+          <style>{`
+            @keyframes emailSubscribeSpin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+          {statusMessage && (
+            <div
+              style={{
+                marginTop: '0.75rem',
+                fontSize: '0.9rem',
+                color:
+                  statusType === 'success'
+                    ? '#1f7a1f'
+                    : statusType === 'error'
+                      ? '#b00020'
+                      : '#333333',
+              }}
+            >
+              {statusMessage}
+            </div>
+          )}
 
           {showSocialLinks && Object.keys(socialLinks).length > 0 && (
             <motion.div

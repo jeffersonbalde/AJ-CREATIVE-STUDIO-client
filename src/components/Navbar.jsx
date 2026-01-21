@@ -19,9 +19,13 @@ const Navbar = () => {
   const { isCustomerAuthenticated, customer, logout, checkAuth } = useAuth();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const userDropdownRef = useRef(null);
   const userButtonRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const searchPanelRef = useRef(null);
 
   // Close user dropdown when clicking outside
   useEffect(() => {
@@ -46,6 +50,7 @@ const Navbar = () => {
   useEffect(() => {
     // Close the mobile menu on route change
     setMobileOpen(false);
+    setSearchOpen(false);
 
     // Temporarily disable global smooth scrolling so the jump to top is instant
     const root = document.documentElement;
@@ -57,6 +62,41 @@ const Navbar = () => {
     // Restore previous scroll behavior after the jump
     root.style.scrollBehavior = previousScrollBehavior || '';
   }, [location.pathname]);
+
+  // Close search when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+
+    const handleClickOutside = (event) => {
+      const clickedButton = event.target.closest('.navbar-search-btn');
+      const clickedPanel = searchPanelRef.current && searchPanelRef.current.contains(event.target);
+      if (!clickedButton && !clickedPanel) {
+        setSearchOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setSearchOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (searchOpen) {
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
+    }
+  }, [searchOpen]);
 
   // Calculate and store base navbar height (without mobile menu)
   // Only update on resize, NOT when mobile menu opens/closes
@@ -171,6 +211,17 @@ const Navbar = () => {
     'Contact',
   ];
 
+  const handleSearchSubmit = (event) => {
+    event.preventDefault();
+    const trimmed = searchQuery.trim();
+    setSearchOpen(false);
+    if (trimmed) {
+      navigate(`/all-products?search=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate('/all-products');
+    }
+  };
+
   return (
     <>
     <motion.nav 
@@ -184,8 +235,8 @@ const Navbar = () => {
         zIndex: 1000,
         backgroundColor: '#FFFFFF', 
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        overflow: mobileOpen ? 'visible' : 'hidden',
-        overflowY: mobileOpen ? 'visible' : 'hidden',
+        overflow: mobileOpen || searchOpen ? 'visible' : 'hidden',
+        overflowY: mobileOpen || searchOpen ? 'visible' : 'hidden',
         overflowX: 'hidden',
         height: mobileOpen ? 'auto' : (navHeight ? `${navHeight}px` : 'auto'),
         paddingLeft: 0,
@@ -207,8 +258,8 @@ const Navbar = () => {
           paddingBottom: mobileOpen ? '0px' : '12px',
           paddingLeft: '1rem',
           paddingRight: '1rem',
-          overflow: 'hidden',
-          overflowY: mobileOpen ? 'visible' : 'hidden',
+          overflow: searchOpen ? 'visible' : 'hidden',
+          overflowY: mobileOpen || searchOpen ? 'visible' : 'hidden',
         }}
       >
         <div
@@ -289,9 +340,17 @@ const Navbar = () => {
               className="btn btn-link p-0 navbar-icon-btn navbar-search-btn"
               style={{ color: '#000', textDecoration: 'none' }}
               aria-label="Search"
+              aria-expanded={searchOpen}
               whileHover={{ opacity: 0.7 }}
               whileTap={{ opacity: 0.5 }}
               transition={{ duration: 0.2 }}
+              onClick={() => {
+                if (!searchOpen) {
+                  setSearchOpen(true);
+                } else {
+                  searchInputRef.current?.focus();
+                }
+              }}
             >
               <svg
                 className="navbar-icon-svg"
@@ -578,6 +637,72 @@ const Navbar = () => {
             </button>
           </div>
         </div>
+
+        {/* Search bar dropdown + backdrop */}
+        <AnimatePresence>
+          {searchOpen && (
+            <>
+              <motion.div
+                className="navbar-search-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                onClick={() => setSearchOpen(false)}
+              />
+              <motion.div
+                className="navbar-search-panel"
+                ref={searchPanelRef}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <form className="navbar-search-form" onSubmit={handleSearchSubmit}>
+                  <div className="navbar-search-input-wrapper">
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search"
+                      className="navbar-search-input"
+                      aria-label="Search products"
+                    />
+                    <button
+                      type="submit"
+                      className="navbar-search-submit"
+                      aria-label="Submit search"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="7" />
+                        <line x1="16.65" y1="16.65" x2="21" y2="21" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="navbar-search-close"
+                    aria-label="Close search"
+                    onClick={() => setSearchOpen(false)}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </form>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
         </div>
 
         {/* Mobile: animated dropdown (items appear at bottom of navbar) */}

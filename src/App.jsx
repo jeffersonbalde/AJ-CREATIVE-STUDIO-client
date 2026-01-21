@@ -20,9 +20,13 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductList from './pages/admin/ProductList';
 import ProductCategories from './pages/admin/ProductCategories';
 import ProductCollections from './pages/admin/ProductCollections';
+import ProductReviews from './pages/admin/ProductReviews';
+import ProductFaqs from './pages/admin/ProductFaqs';
+import ContactMessages from './pages/admin/ContactMessages';
 import LandingPageSections from './pages/admin/LandingPageSections';
 import SectionTypeAdmin from './pages/admin/content/SectionTypeAdmin';
 import CustomerList from './pages/admin/CustomerList';
+import EmailSubscribers from './pages/admin/EmailSubscribers';
 import TimeLogging from './pages/admin/TimeLogging';
 import OrderList from './pages/admin/OrderList';
 import SidebarLayout from './layout/SidebarLayout';
@@ -135,6 +139,22 @@ const AppContent = () => {
               }
             />
             <Route
+              path="/admin/products/reviews"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ProductReviews /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/products/faqs"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ProductFaqs /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/landing-page-sections"
               element={
                 <ProtectedRoute>
@@ -209,6 +229,22 @@ const AppContent = () => {
               element={
                 <ProtectedRoute>
                   <SidebarLayout><TimeLogging /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/customers/email-subscribers"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><EmailSubscribers /></SidebarLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/customers/contact-messages"
+              element={
+                <ProtectedRoute>
+                  <SidebarLayout><ContactMessages /></SidebarLayout>
                 </ProtectedRoute>
               }
             />

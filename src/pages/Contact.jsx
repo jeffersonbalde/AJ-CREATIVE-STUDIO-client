@@ -1,11 +1,68 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
+import { toast } from 'react-toastify';
 
 const Contact = () => {
-  const handleSubmit = (e) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    comment: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [statusType, setStatusType] = useState('info');
+  const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // For now, just prevent reload. You can hook this up to your backend/email later.
+    if (submitting) return;
+    if (!formData.email.trim() || !formData.comment.trim()) {
+      setStatusType('error');
+      setStatusMessage('Email and comment are required.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setStatusMessage('');
+      const response = await fetch(`${apiBaseUrl}/contact-messages`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name.trim() || null,
+          email: formData.email.trim(),
+          phone: formData.phone.trim() || null,
+          comment: formData.comment.trim(),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to send message.');
+      }
+
+      toast.success(data?.message || 'Message sent successfully.');
+      setStatusType('success');
+      setStatusMessage(data?.message || 'Message sent successfully.');
+      setFormData({ name: '', email: '', phone: '', comment: '' });
+    } catch (error) {
+      console.error('Contact submit error:', error);
+      toast.error(error.message || 'Unable to send message.');
+      setStatusType('error');
+      setStatusMessage(error.message || 'Unable to send message.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -57,8 +114,11 @@ const Contact = () => {
               <div className="col-md-6">
                 <input
                   type="text"
+                  name="name"
                   placeholder="Name"
                   className="form-control"
+                  value={formData.name}
+                  onChange={handleChange}
                   style={{ borderRadius: 0, fontSize: '0.95rem' }}
                 />
               </div>
@@ -66,8 +126,11 @@ const Contact = () => {
                 <input
                   type="email"
                   required
+                  name="email"
                   placeholder="Email *"
                   className="form-control"
+                  value={formData.email}
+                  onChange={handleChange}
                   style={{ borderRadius: 0, fontSize: '0.95rem' }}
                 />
               </div>
@@ -77,8 +140,11 @@ const Contact = () => {
             <div className="mb-3">
               <input
                 type="tel"
+                name="phone"
                 placeholder="Phone number"
                 className="form-control"
+                value={formData.phone}
+                onChange={handleChange}
                 style={{ borderRadius: 0, fontSize: '0.95rem' }}
               />
             </div>
@@ -87,8 +153,11 @@ const Contact = () => {
             <div className="mb-4">
               <textarea
                 placeholder="Comment"
+                name="comment"
                 rows={5}
                 className="form-control"
+                value={formData.comment}
+                onChange={handleChange}
                 style={{ borderRadius: 0, fontSize: '0.95rem', resize: 'vertical' }}
               />
             </div>
@@ -107,11 +176,29 @@ const Contact = () => {
                 borderRadius: '4px',
                 fontSize: '0.98rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                opacity: submitting ? 0.7 : 1,
               }}
+              disabled={submitting}
             >
-              Send
+              {submitting ? 'Sending...' : 'Send'}
             </motion.button>
+            {statusMessage && (
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  fontSize: '0.9rem',
+                  color:
+                    statusType === 'success'
+                      ? '#1f7a1f'
+                      : statusType === 'error'
+                        ? '#b00020'
+                        : '#333333',
+                }}
+              >
+                {statusMessage}
+              </div>
+            )}
           </motion.form>
         </div>
       </section>

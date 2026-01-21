@@ -125,6 +125,16 @@ const Sidebar = ({ onCloseSidebar }) => {
               label: "Collections",
               href: "/admin/products/collections",
             },
+            {
+              icon: "fas fa-star",
+              label: "Product Reviews",
+              href: "/admin/products/reviews",
+            },
+            {
+              icon: "fas fa-question-circle",
+              label: "Product FAQs",
+              href: "/admin/products/faqs",
+            },
           ],
         },
       ],
@@ -158,16 +168,6 @@ const Sidebar = ({ onCloseSidebar }) => {
               label: "Testimonials",
               href: "/admin/content/testimonials",
             },
-            {
-              icon: "fas fa-envelope",
-              label: "Email Subscribe",
-              href: "/admin/content/email-subscribe",
-            },
-            {
-              icon: "fas fa-images",
-              label: "Media Library",
-              href: "/admin/content/media",
-            },
           ],
         },
       ],
@@ -191,6 +191,16 @@ const Sidebar = ({ onCloseSidebar }) => {
               label: "Time Logging",
               href: "/admin/customers/time-logs",
             },
+                {
+                  icon: "fas fa-envelope",
+                  label: "Email Subscribers",
+                  href: "/admin/customers/email-subscribers",
+                },
+            {
+              icon: "fas fa-envelope-open-text",
+              label: "Contact Messages",
+              href: "/admin/customers/contact-messages",
+            },
           ],
         },
       ],
@@ -198,11 +208,6 @@ const Sidebar = ({ onCloseSidebar }) => {
     {
       heading: "Settings",
       items: [
-        {
-          icon: "fas fa-user",
-          label: "Profile",
-          href: "/admin/profile",
-        },
         {
           icon: "fas fa-cog",
           label: "Settings",

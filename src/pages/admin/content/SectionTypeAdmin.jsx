@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Portal from "../../../components/Portal";
@@ -83,6 +84,41 @@ const SectionTypeAdmin = () => {
     to: 0,
   });
   const [faqRows, setFaqRows] = useState([]);
+  const faqInitialFormRef = useRef(null);
+
+  // Testimonials item manager state (for section_type === 'testimonials')
+  const [testimonialSectionId, setTestimonialSectionId] = useState(null);
+  const [testimonialItems, setTestimonialItems] = useState([]);
+  const [showTestimonialModal, setShowTestimonialModal] = useState(false);
+  const [testimonialClosing, setTestimonialClosing] = useState(false);
+  const [testimonialSaving, setTestimonialSaving] = useState(false);
+  const [testimonialDeletingId, setTestimonialDeletingId] = useState(null);
+  const [testimonialTouched, setTestimonialTouched] = useState({
+    order: false,
+    name: false,
+    content: false,
+    rating: false,
+  });
+  const [testimonialSubmitted, setTestimonialSubmitted] = useState(false);
+  const [editingTestimonialItem, setEditingTestimonialItem] = useState(null);
+  const [testimonialModalForm, setTestimonialModalForm] = useState({
+    content: '',
+    name: '',
+    role: '',
+    rating: 5,
+    order: 1,
+    is_active: true,
+    image: '',
+  });
+  const [testimonialPageMeta, setTestimonialPageMeta] = useState({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    from: 0,
+    to: 0,
+  });
+  const [testimonialRows, setTestimonialRows] = useState([]);
+  const testimonialInitialFormRef = useRef(null);
 
   const isDuplicateOrder = useCallback((ord, excludeId = null) => {
     const normalized = Number(ord || 0);
@@ -92,6 +128,15 @@ const SectionTypeAdmin = () => {
       return Number(f.order || 0) === normalized;
     });
   }, [faqItems]);
+
+  const isDuplicateTestimonialOrder = useCallback((ord, excludeId = null) => {
+    const normalized = Number(ord || 0);
+    if (!Number.isFinite(normalized)) return false;
+    return (testimonialItems || []).some((t) => {
+      if (excludeId && t.id === excludeId) return false;
+      return Number(t.order || 0) === normalized;
+    });
+  }, [testimonialItems]);
 
   const apiBaseUrl = import.meta.env.VITE_LARAVEL_API || import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -119,6 +164,54 @@ const SectionTypeAdmin = () => {
       is_active: item?.is_active !== false,
     }));
   }, []);
+
+  const normalizeFaqForm = useCallback((form) => ({
+    question: (form?.question || '').trim(),
+    answer: (form?.answer || '').trim(),
+    order: Number(form?.order || 0) || 0,
+    is_active: !!form?.is_active,
+  }), []);
+
+  const normalizeTestimonialItems = useCallback((raw) => {
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr.map((item, idx) => ({
+      id: item?.id || `testimonial-${Date.now()}-${idx}`,
+      content: item?.content || item?.text || item?.comment || '',
+      name: item?.name || item?.author || '',
+      role: item?.role || item?.productType || '',
+      rating: Number.isFinite(Number(item?.rating)) ? Number(item.rating) : 5,
+      order: Number.isFinite(Number(item?.order)) ? Number(item.order) : idx + 1,
+      is_active: item?.is_active !== false,
+      image: item?.image || '',
+      title: item?.title || '',
+    }));
+  }, []);
+
+  const normalizeTestimonialForm = useCallback((form) => ({
+    content: (form?.content || '').trim(),
+    name: (form?.name || '').trim(),
+    role: (form?.role || '').trim(),
+    rating: Number(form?.rating || 0) || 0,
+    order: Number(form?.order || 0) || 0,
+    is_active: !!form?.is_active,
+    image: (form?.image || '').trim(),
+  }), []);
+
+  const isFaqDirty = useMemo(() => {
+    if (!showFaqItemModal) return false;
+    const initial = faqInitialFormRef.current;
+    if (!initial) return false;
+    const current = normalizeFaqForm(faqModalForm);
+    return JSON.stringify(current) !== JSON.stringify(initial);
+  }, [showFaqItemModal, faqModalForm, normalizeFaqForm]);
+
+  const isTestimonialDirty = useMemo(() => {
+    if (!showTestimonialModal) return false;
+    const initial = testimonialInitialFormRef.current;
+    if (!initial) return false;
+    const current = normalizeTestimonialForm(testimonialModalForm);
+    return JSON.stringify(current) !== JSON.stringify(initial);
+  }, [showTestimonialModal, testimonialModalForm, normalizeTestimonialForm]);
 
   // Fetch all sections of this type
   const fetchAllSections = useCallback(async () => {
@@ -282,6 +375,51 @@ const SectionTypeAdmin = () => {
     }
   }, [sectionType, faqItems, searchTerm, statusFilter, currentPage, itemsPerPage]);
 
+  // Filter + paginate testimonial items using the same search/status/per-page controls (for consistency)
+  useEffect(() => {
+    if (sectionType !== 'testimonials') return;
+
+    let filtered = [...(testimonialItems || [])];
+
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter((t) => {
+        const content = (t.content || '').toLowerCase();
+        const name = (t.name || '').toLowerCase();
+        const role = (t.role || '').toLowerCase();
+        return content.includes(search) || name.includes(search) || role.includes(search);
+      });
+    }
+
+    if (statusFilter === 'active') {
+      filtered = filtered.filter((t) => t.is_active === true);
+    } else if (statusFilter === 'inactive') {
+      filtered = filtered.filter((t) => t.is_active !== true);
+    }
+
+    filtered = filtered.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    const total = filtered.length;
+    const lastPage = Math.max(1, Math.ceil(total / itemsPerPage));
+    const safePage = Math.min(currentPage, lastPage);
+    const startIndex = (safePage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginated = filtered.slice(startIndex, endIndex);
+
+    setTestimonialRows(paginated);
+    setTestimonialPageMeta({
+      current_page: safePage,
+      last_page: lastPage,
+      total,
+      from: total > 0 ? startIndex + 1 : 0,
+      to: Math.min(endIndex, total),
+    });
+
+    if (safePage !== currentPage) {
+      setCurrentPage(safePage);
+    }
+  }, [sectionType, testimonialItems, searchTerm, statusFilter, currentPage, itemsPerPage]);
+
   // Keep stats panels accurate for FAQ items (not section count)
   useEffect(() => {
     if (sectionType !== 'faq') return;
@@ -293,6 +431,18 @@ const SectionTypeAdmin = () => {
       publishedSections: 0,
     });
   }, [sectionType, faqItems]);
+
+  // Keep stats panels accurate for testimonial items (not section count)
+  useEffect(() => {
+    if (sectionType !== 'testimonials') return;
+    const totalTestimonials = (testimonialItems || []).length;
+    const activeTestimonials = (testimonialItems || []).filter((t) => t.is_active === true).length;
+    setStats({
+      totalSections: totalTestimonials,
+      activeSections: activeTestimonials,
+      publishedSections: 0,
+    });
+  }, [sectionType, testimonialItems]);
 
   const fetchCollections = useCallback(async () => {
     try {
@@ -379,6 +529,60 @@ const SectionTypeAdmin = () => {
 
     ensureFaqSection();
   }, [sectionType, allSections, apiBaseUrl, token, normalizeFaqItems, fetchAllSections]);
+
+  // Testimonials: keep a single section and manage only testimonial items via a table+modal.
+  useEffect(() => {
+    const ensureTestimonialsSection = async () => {
+      if (sectionType !== 'testimonials') return;
+
+      try {
+        if (!allSections || allSections.length === 0) return;
+
+        const primaryTestimonials =
+          allSections.find((s) => s.section_type === 'testimonials' && s.title === 'What Our Users Are Saying') ||
+          allSections.find((s) => s.section_type === 'testimonials') ||
+          null;
+
+        if (primaryTestimonials) {
+          setTestimonialSectionId(primaryTestimonials.id);
+          const cfg = typeof primaryTestimonials.config === 'string'
+            ? JSON.parse(primaryTestimonials.config || '{}')
+            : (primaryTestimonials.config || {});
+          setTestimonialItems(normalizeTestimonialItems(cfg.testimonials));
+          return;
+        }
+
+        const response = await fetch(`${apiBaseUrl}/landing-page-sections`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            section_type: 'testimonials',
+            is_active: true,
+            display_order: 8,
+            config: JSON.stringify({ testimonials: [], displayStyle: 'slider', autoRotate: true, backgroundColor: '#FFFFFF' }),
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || 'Failed to create testimonials section');
+        }
+
+        setTestimonialSectionId(data.section?.id || null);
+        setTestimonialItems([]);
+        fetchAllSections();
+      } catch (e) {
+        console.error('ensureTestimonialsSection error:', e);
+        toast.error(e.message || 'Unable to initialize testimonials section', { style: { zIndex: 100002 } });
+      }
+    };
+
+    ensureTestimonialsSection();
+  }, [sectionType, allSections, apiBaseUrl, token, normalizeTestimonialItems, fetchAllSections]);
 
   useEffect(() => {
     if (!initialLoading) {
@@ -497,17 +701,39 @@ const SectionTypeAdmin = () => {
   const handleNewSection = () => {
     // FAQ is a single permanent landing page block; don't allow creating multiple FAQ sections.
     if (sectionType === 'faq') {
-      setEditingFaqItem(null);
-      setFaqModalForm({
+      const initialForm = {
         question: '',
         answer: '',
         order: (faqItems.length || 0) + 1,
         is_active: true,
-      });
+      };
+      setEditingFaqItem(null);
+      setFaqModalForm(initialForm);
+      faqInitialFormRef.current = normalizeFaqForm(initialForm);
       setFaqTouched({ order: false, question: false, answer: false });
       setFaqSubmitted(false);
       setFaqClosing(false);
       setShowFaqItemModal(true);
+      return;
+    }
+
+    if (sectionType === 'testimonials') {
+      const initialForm = {
+        content: '',
+        name: '',
+        role: '',
+        rating: 5,
+        order: (testimonialItems.length || 0) + 1,
+        is_active: true,
+        image: '',
+      };
+      setEditingTestimonialItem(null);
+      setTestimonialModalForm(initialForm);
+      testimonialInitialFormRef.current = normalizeTestimonialForm(initialForm);
+      setTestimonialTouched({ order: false, name: false, content: false, rating: false });
+      setTestimonialSubmitted(false);
+      setTestimonialClosing(false);
+      setShowTestimonialModal(true);
       return;
     }
 
@@ -529,6 +755,78 @@ const SectionTypeAdmin = () => {
     setShowDetailModal(false);
     setSelectedSection(null);
   };
+
+  const closeFaqModal = () => {
+    setFaqClosing(true);
+    setTimeout(() => {
+      setShowFaqItemModal(false);
+      setFaqClosing(false);
+    }, 180);
+  };
+
+  const closeTestimonialModal = () => {
+    setTestimonialClosing(true);
+    setTimeout(() => {
+      setShowTestimonialModal(false);
+      setTestimonialClosing(false);
+    }, 180);
+  };
+
+  const handleFaqCloseAttempt = async () => {
+    if (faqSaving) return;
+    if (isFaqDirty) {
+      const result = await showAlert.confirm(
+        'Unsaved Changes',
+        'You have unsaved FAQ changes. Close without saving?',
+        'Yes, Close',
+        'Continue Editing'
+      );
+      if (!result.isConfirmed) return;
+    }
+    closeFaqModal();
+  };
+
+  const handleTestimonialCloseAttempt = async () => {
+    if (testimonialSaving) return;
+    if (isTestimonialDirty) {
+      const result = await showAlert.confirm(
+        'Unsaved Changes',
+        'You have unsaved testimonial changes. Close without saving?',
+        'Yes, Close',
+        'Continue Editing'
+      );
+      if (!result.isConfirmed) return;
+    }
+    closeTestimonialModal();
+  };
+
+  useEffect(() => {
+    if (!showFaqItemModal) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleFaqCloseAttempt();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showFaqItemModal, handleFaqCloseAttempt]);
+
+  useEffect(() => {
+    if (!showTestimonialModal) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleTestimonialCloseAttempt();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showTestimonialModal, handleTestimonialCloseAttempt]);
 
   const handleDeleteSection = async (section) => {
     if (actionLock) {
@@ -817,6 +1115,58 @@ const SectionTypeAdmin = () => {
     }
   }, [faqSectionId, allSections, apiBaseUrl, token, fetchAllSections]);
 
+  const saveTestimonialItems = useCallback(async (nextItems, options = {}) => {
+    if (!testimonialSectionId) return false;
+
+    setActionLock(true);
+    setActionLoading(testimonialSectionId);
+    const {
+      loadingTitle = 'Saving Testimonials',
+      loadingText = 'Please wait...',
+      successMessage = 'Testimonials saved',
+    } = options;
+
+    try {
+      showAlert.processing(loadingTitle, loadingText, { zIndex: 100000 });
+      const section = allSections.find((s) => s.id === testimonialSectionId) || null;
+      const existingConfig = section?.config;
+      const cfg = typeof existingConfig === 'string' ? JSON.parse(existingConfig || '{}') : (existingConfig || {});
+      const updatedConfig = { ...cfg, testimonials: nextItems };
+
+      const response = await fetch(`${apiBaseUrl}/landing-page-sections/${testimonialSectionId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          section_type: 'testimonials',
+          is_active: true,
+          config: JSON.stringify(updatedConfig),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to save testimonials');
+      }
+
+      setTestimonialItems(nextItems);
+      toast.success(successMessage, { style: { zIndex: 100002 } });
+      fetchAllSections();
+      return true;
+    } catch (e) {
+      console.error('saveTestimonialItems error:', e);
+      toast.error(e.message || 'Failed to save testimonials', { style: { zIndex: 100002 } });
+      return false;
+    } finally {
+      showAlert.close();
+      setActionLock(false);
+      setActionLoading(null);
+    }
+  }, [testimonialSectionId, allSections, apiBaseUrl, token, fetchAllSections]);
+
   const handleSave = async () => {
     setShowSectionForm(false);
     setEditingSection(null);
@@ -853,6 +1203,18 @@ const SectionTypeAdmin = () => {
 
     return section.source_value;
   };
+
+  const searchLabel = sectionType === 'faq'
+    ? 'Search FAQs'
+    : sectionType === 'testimonials'
+      ? 'Search Testimonials'
+      : 'Search Sections';
+
+  const searchPlaceholder = sectionType === 'faq'
+    ? 'Search by question or answer...'
+    : sectionType === 'testimonials'
+      ? 'Search by comment, author, or role...'
+      : 'Search by title or description...';
 
   return (
     <div className={`container-fluid px-3 pt-0 pb-2 inventory-categories-container ${!loading ? 'fadeIn' : ''}`}>
@@ -895,7 +1257,7 @@ const SectionTypeAdmin = () => {
             }}
           >
             <i className="fas fa-plus me-1" />
-            {sectionType === 'faq' ? 'Add FAQ' : 'New Section'}
+            {sectionType === 'faq' ? 'Add FAQ' : sectionType === 'testimonials' ? 'Add Testimonial' : 'New Section'}
           </button>
           <button
             className="btn btn-sm"
@@ -1021,7 +1383,7 @@ const SectionTypeAdmin = () => {
                 className="form-label small fw-semibold mb-1"
                 style={{ color: "var(--text-muted)" }}
               >
-                {sectionType === 'faq' ? 'Search FAQs' : 'Search Sections'}
+                {searchLabel}
               </label>
               <div className="input-group input-group-sm">
                 <span
@@ -1037,7 +1399,7 @@ const SectionTypeAdmin = () => {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder={sectionType === 'faq' ? 'Search by question or answer...' : 'Search by title or description...'}
+                  placeholder={searchPlaceholder}
                   value={searchTerm}
                   onChange={handleSearchChange}
                   style={{
@@ -1204,13 +1566,15 @@ const SectionTypeAdmin = () => {
                             <button
                               className="btn btn-success btn-sm text-white"
                               onClick={() => {
-                                setEditingFaqItem(item);
-                                setFaqModalForm({
+                                const initialForm = {
                                   question: item.question || '',
                                   answer: item.answer || '',
                                   order: item.order || 1,
                                   is_active: item.is_active !== false,
-                                });
+                                };
+                                setEditingFaqItem(item);
+                                setFaqModalForm(initialForm);
+                                faqInitialFormRef.current = normalizeFaqForm(initialForm);
                                 setFaqTouched({ order: false, question: false, answer: false });
                                 setFaqSubmitted(false);
                                 setFaqClosing(false);
@@ -1415,7 +1779,308 @@ const SectionTypeAdmin = () => {
         </div>
       )}
 
-      {sectionType !== 'faq' && (
+      {sectionType === 'testimonials' && (
+        <div
+          className="card border-0 shadow-sm mb-3"
+          style={{ backgroundColor: "var(--background-white)" }}
+        >
+          <div
+            className="card-header border-bottom-0 py-2"
+            style={{
+              background: "var(--topbar-bg)",
+              color: "var(--topbar-text)",
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center">
+              <h5 className="card-title mb-0 fw-semibold text-white">
+                <i className="fas fa-star me-2"></i>
+                Testimonials
+                {!loading && (
+                  <small className="opacity-75 ms-2 text-white">
+                    ({testimonialPageMeta.total} total)
+                  </small>
+                )}
+              </h5>
+            </div>
+          </div>
+
+          <div className="card-body p-0">
+            {testimonialRows.length === 0 ? (
+              <div className="p-3 text-muted small">
+                No testimonials found. Click <strong>Add Testimonial</strong> to create one.
+              </div>
+            ) : (
+              <div className="table-responsive" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="table table-striped table-hover mb-0" style={{ minWidth: '900px', tableLayout: 'fixed', width: '100%' }}>
+                  <thead style={{ backgroundColor: "var(--background-light)" }}>
+                    <tr>
+                      <th className="text-center small fw-semibold" style={{ width: "4%" }}>
+                        #
+                      </th>
+                      <th className="text-center small fw-semibold" style={{ width: "120px", minWidth: "120px" }}>
+                        Actions
+                      </th>
+                      <th className="small fw-semibold" style={{ width: "360px", minWidth: "360px" }}>
+                        Comment
+                      </th>
+                      <th className="small fw-semibold" style={{ width: "220px", minWidth: "220px" }}>
+                        Author
+                      </th>
+                      <th className="small fw-semibold text-center" style={{ width: "90px", minWidth: "90px" }}>
+                        Rating
+                      </th>
+                      <th className="small fw-semibold text-center" style={{ width: "100px", minWidth: "100px" }}>
+                        Status
+                      </th>
+                      <th className="text-center small fw-semibold" style={{ width: "90px", minWidth: "90px" }}>
+                        Order
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testimonialRows.map((item, index) => (
+                      <tr key={item.id} className="align-middle" style={{ height: '48px', whiteSpace: 'nowrap' }}>
+                        <td
+                          className="text-center fw-bold"
+                          style={{ 
+                            color: "var(--text-primary)",
+                            width: "40px",
+                            minWidth: "40px",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          {(testimonialPageMeta.current_page - 1) * itemsPerPage + index + 1}
+                        </td>
+                        <td className="text-center" style={{ width: "120px", minWidth: "120px", padding: "0.5rem" }}>
+                          <div className="d-flex justify-content-center gap-1" style={{ gap: "0.25rem" }}>
+                            <button
+                              className="btn btn-success btn-sm text-white"
+                              onClick={() => {
+                                const initialForm = {
+                                  content: item.content || '',
+                                  name: item.name || '',
+                                  role: item.role || '',
+                                  rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : 5,
+                                  order: item.order || 1,
+                                  is_active: item.is_active !== false,
+                                  image: item.image || '',
+                                };
+                                setEditingTestimonialItem(item);
+                                setTestimonialModalForm(initialForm);
+                                testimonialInitialFormRef.current = normalizeTestimonialForm(initialForm);
+                                setTestimonialTouched({ order: false, name: false, content: false, rating: false });
+                                setTestimonialSubmitted(false);
+                                setTestimonialClosing(false);
+                                setShowTestimonialModal(true);
+                              }}
+                              disabled={isActionDisabled() || testimonialSaving || testimonialDeletingId === item.id}
+                              title="Edit Testimonial"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(0)";
+                                  e.target.style.boxShadow = "none";
+                                }
+                              }}
+                            >
+                              <FaEdit style={{ fontSize: "0.875rem" }} />
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm text-white"
+                              onClick={async () => {
+                                if (testimonialSaving || testimonialDeletingId) return;
+                                const confirmation = await showAlert.confirm(
+                                  "Delete Testimonial",
+                                  "Remove this testimonial?",
+                                  "Delete",
+                                  "Cancel"
+                                );
+                                if (!confirmation.isConfirmed) return;
+                                setTestimonialDeletingId(item.id);
+                                try {
+                                  await saveTestimonialItems(testimonialItems.filter((t) => t.id !== item.id), {
+                                    loadingTitle: 'Deleting Testimonial',
+                                    loadingText: 'Removing testimonial...',
+                                    successMessage: 'Testimonial deleted',
+                                  });
+                                } finally {
+                                  setTestimonialDeletingId(null);
+                                }
+                              }}
+                              disabled={isActionDisabled() || testimonialSaving || testimonialDeletingId === item.id}
+                              title="Delete Testimonial"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "6px",
+                                transition: "all 0.2s ease-in-out",
+                                padding: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(-1px)";
+                                  e.target.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!e.target.disabled) {
+                                  e.target.style.transform = "translateY(0)";
+                                  e.target.style.boxShadow = "none";
+                                }
+                              }}
+                            >
+                              {testimonialDeletingId === item.id ? (
+                                <span className="spinner-border spinner-border-sm" role="status"></span>
+                              ) : (
+                                <FaTrash style={{ fontSize: "0.875rem" }} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td style={{ overflow: 'hidden' }}>
+                          <div className="fw-semibold text-truncate" title={item.content}>
+                            {item.content}
+                          </div>
+                        </td>
+                        <td style={{ overflow: 'hidden' }}>
+                          <div className="fw-semibold text-truncate" title={item.name}>
+                            {item.name}
+                          </div>
+                          {item.role && (
+                            <div className="text-muted small text-truncate" title={item.role}>
+                              {item.role}
+                            </div>
+                          )}
+                        </td>
+                        <td className="text-center fw-bold" style={{ color: "var(--text-primary)" }}>
+                          {Number.isFinite(Number(item.rating)) ? Number(item.rating) : 5}
+                        </td>
+                        <td className="text-center">
+                          <span
+                            className={`badge ${item.is_active ? 'bg-success' : 'bg-secondary'}`}
+                            style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", whiteSpace: "nowrap" }}
+                          >
+                            {item.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="text-center fw-bold" style={{ color: "var(--text-primary)" }}>
+                          {item.order}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {!loading && testimonialPageMeta.total > 0 && (
+            <div className="card-footer bg-white border-top px-3 py-2">
+              <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+                <div className="text-center text-md-start">
+                  <small style={{ color: "var(--text-muted)" }}>
+                    Showing{" "}
+                    <span className="fw-semibold" style={{ color: "var(--text-primary)" }}>
+                      {testimonialPageMeta.from}-{testimonialPageMeta.to}
+                    </span>{" "}
+                    of{" "}
+                    <span className="fw-semibold" style={{ color: "var(--text-primary)" }}>
+                      {testimonialPageMeta.total}
+                    </span>{" "}
+                    testimonials
+                  </small>
+                </div>
+
+                <div className="d-flex align-items-center gap-2">
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={testimonialPageMeta.current_page === 1 || isActionDisabled()}
+                    style={{
+                      transition: "all 0.2s ease-in-out",
+                      border: "2px solid var(--primary-color)",
+                      color: "var(--primary-color)",
+                      backgroundColor: "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!e.target.disabled) {
+                        e.target.style.transform = "translateY(-1px)";
+                        e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                        e.target.style.backgroundColor = "var(--primary-color)";
+                        e.target.style.color = "white";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.transform = "translateY(0)";
+                      e.target.style.boxShadow = "none";
+                      e.target.style.backgroundColor = "transparent";
+                      e.target.style.color = "var(--primary-color)";
+                    }}
+                  >
+                    <i className="fas fa-chevron-left me-1"></i>
+                    Previous
+                  </button>
+
+                  <div className="d-md-none">
+                    <small style={{ color: "var(--text-muted)" }}>
+                      Page {testimonialPageMeta.current_page} of {testimonialPageMeta.last_page}
+                    </small>
+                  </div>
+
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, testimonialPageMeta.last_page))}
+                    disabled={testimonialPageMeta.current_page === testimonialPageMeta.last_page || isActionDisabled()}
+                    style={{
+                      transition: "all 0.2s ease-in-out",
+                      border: "2px solid var(--primary-color)",
+                      color: "var(--primary-color)",
+                      backgroundColor: "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!e.target.disabled) {
+                        e.target.style.transform = "translateY(-1px)";
+                        e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                        e.target.style.backgroundColor = "var(--primary-color)";
+                        e.target.style.color = "white";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.transform = "translateY(0)";
+                      e.target.style.boxShadow = "none";
+                      e.target.style.backgroundColor = "transparent";
+                      e.target.style.color = "var(--primary-color)";
+                    }}
+                  >
+                    Next
+                    <i className="fas fa-chevron-right ms-1"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {sectionType !== 'faq' && sectionType !== 'testimonials' && (
       <div
         className="card border-0 shadow-sm"
         style={{ backgroundColor: "var(--background-white)" }}
@@ -1925,7 +2590,7 @@ const SectionTypeAdmin = () => {
       </div>
       )}
 
-      {showSectionForm && sectionType !== 'faq' && (
+      {showSectionForm && sectionType !== 'faq' && sectionType !== 'testimonials' && (
         <LandingPageSectionFormModal
           isOpen={showSectionForm}
           onClose={() => {
@@ -1957,12 +2622,7 @@ const SectionTypeAdmin = () => {
               height: '100%',
             }}
             onClick={() => {
-              if (faqSaving) return;
-              setFaqClosing(true);
-              setTimeout(() => {
-                setShowFaqItemModal(false);
-                setFaqClosing(false);
-              }, 180);
+              handleFaqCloseAttempt();
             }}
             aria-modal="true"
             role="dialog"
@@ -1985,12 +2645,7 @@ const SectionTypeAdmin = () => {
                     type="button"
                     className="btn-close btn-close-white btn-smooth"
                     onClick={() => {
-                      if (faqSaving) return;
-                      setFaqClosing(true);
-                      setTimeout(() => {
-                        setShowFaqItemModal(false);
-                        setFaqClosing(false);
-                      }, 180);
+                      handleFaqCloseAttempt();
                     }}
                     aria-label="Close"
                     disabled={faqSaving}
@@ -2088,12 +2743,7 @@ const SectionTypeAdmin = () => {
                     type="button"
                     className="btn btn-outline-secondary btn-smooth"
                     onClick={() => {
-                      if (faqSaving) return;
-                      setFaqClosing(true);
-                      setTimeout(() => {
-                        setShowFaqItemModal(false);
-                        setFaqClosing(false);
-                      }, 180);
+                      handleFaqCloseAttempt();
                     }}
                     disabled={faqSaving}
                   >
@@ -2158,6 +2808,272 @@ const SectionTypeAdmin = () => {
                       </>
                     ) : (
                       <>{editingFaqItem ? 'Update FAQ' : 'Save FAQ'}</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
+      {showTestimonialModal && sectionType === 'testimonials' && (
+        <Portal>
+          <div
+            className={`modal fade show d-block modal-backdrop-animation ${testimonialClosing ? 'exit' : ''}`}
+            style={{ 
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              transition: 'background-color 0.2s ease',
+              zIndex: 9999,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100%',
+              height: '100%',
+            }}
+            onClick={() => {
+              handleTestimonialCloseAttempt();
+            }}
+            aria-modal="true"
+            role="dialog"
+          >
+            <div className="modal-dialog modal-dialog-centered modal-lg" style={{ zIndex: 10000 }} onClick={(e) => e.stopPropagation()}>
+              <div
+                className={`modal-content border-0 modal-content-animation ${testimonialClosing ? 'exit' : ''}`}
+                style={{
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  zIndex: 10000,
+                }}
+              >
+                <div className="modal-header border-0 text-white modal-smooth" style={{ backgroundColor: 'var(--primary-color)' }}>
+                  <h5 className="modal-title fw-bold">
+                    <i className={`fas ${editingTestimonialItem ? 'fa-edit' : 'fa-plus'} me-2`}></i>
+                    {editingTestimonialItem ? 'Edit Testimonial' : 'Create New Testimonial'}
+                  </h5>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white btn-smooth"
+                    onClick={() => {
+                      handleTestimonialCloseAttempt();
+                    }}
+                    aria-label="Close"
+                    disabled={testimonialSaving}
+                  />
+                </div>
+                <div
+                  className="modal-body modal-smooth"
+                  style={{
+                    maxHeight: '70vh',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    backgroundColor: '#f8f9fa',
+                    width: '100%',
+                    maxWidth: '100%',
+                  }}
+                >
+                  <div className="row g-3">
+                    <div className="col-md-3">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Order <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        className={`form-control modal-smooth ${((testimonialSubmitted || testimonialTouched.order) && ((!Number.isFinite(Number(testimonialModalForm.order)) || Number(testimonialModalForm.order) < 1) || (Number.isFinite(Number(testimonialModalForm.order)) && Number(testimonialModalForm.order) >= 1 && isDuplicateTestimonialOrder(testimonialModalForm.order, editingTestimonialItem?.id)))) ? 'is-invalid' : ''}`}
+                        value={testimonialModalForm.order}
+                        min={1}
+                        onChange={(e) => {
+                          setTestimonialTouched((p) => ({ ...p, order: true }));
+                          setTestimonialModalForm((p) => ({ ...p, order: Number(e.target.value || 1) }));
+                        }}
+                      />
+                      {(testimonialSubmitted || testimonialTouched.order) && (!Number.isFinite(Number(testimonialModalForm.order)) || Number(testimonialModalForm.order) < 1) && (
+                        <div className="invalid-feedback">Order must be at least 1.</div>
+                      )}
+                      {(testimonialSubmitted || testimonialTouched.order) && Number.isFinite(Number(testimonialModalForm.order)) && Number(testimonialModalForm.order) >= 1 && isDuplicateTestimonialOrder(testimonialModalForm.order, editingTestimonialItem?.id) && (
+                        <div className="invalid-feedback">Order is already used.</div>
+                      )}
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Rating <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className={`form-select modal-smooth ${((testimonialSubmitted || testimonialTouched.rating) && (!Number.isFinite(Number(testimonialModalForm.rating)) || Number(testimonialModalForm.rating) < 1 || Number(testimonialModalForm.rating) > 5)) ? 'is-invalid' : ''}`}
+                        value={testimonialModalForm.rating}
+                        onChange={(e) => {
+                          setTestimonialTouched((p) => ({ ...p, rating: true }));
+                          setTestimonialModalForm((p) => ({ ...p, rating: Number(e.target.value || 5) }));
+                        }}
+                      >
+                        {[1, 2, 3, 4, 5].map((val) => (
+                          <option key={val} value={val}>{val}</option>
+                        ))}
+                      </select>
+                      {(testimonialSubmitted || testimonialTouched.rating) && (!Number.isFinite(Number(testimonialModalForm.rating)) || Number(testimonialModalForm.rating) < 1 || Number(testimonialModalForm.rating) > 5) && (
+                        <div className="invalid-feedback">Rating must be between 1 and 5.</div>
+                      )}
+                    </div>
+                    <div className="col-md-6 d-flex align-items-end">
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={testimonialModalForm.is_active}
+                          onChange={(e) => setTestimonialModalForm((p) => ({ ...p, is_active: e.target.checked }))}
+                          id="testimonialItemActive"
+                        />
+                        <label className="form-check-label" htmlFor="testimonialItemActive">
+                          Active
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Author Name <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={`form-control modal-smooth ${((testimonialSubmitted || testimonialTouched.name) && !testimonialModalForm.name.trim()) ? 'is-invalid' : ''}`}
+                        value={testimonialModalForm.name}
+                        onChange={(e) => {
+                          setTestimonialTouched((p) => ({ ...p, name: true }));
+                          setTestimonialModalForm((p) => ({ ...p, name: e.target.value }));
+                        }}
+                        placeholder="Enter author name..."
+                      />
+                      {(testimonialSubmitted || testimonialTouched.name) && !testimonialModalForm.name.trim() && (
+                        <div className="invalid-feedback">Author name is required.</div>
+                      )}
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Author Role (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control modal-smooth"
+                        value={testimonialModalForm.role}
+                        onChange={(e) => setTestimonialModalForm((p) => ({ ...p, role: e.target.value }))}
+                        placeholder="e.g. Founder, Creative Director"
+                      />
+                    </div>
+
+                    <div className="col-md-12">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Comment <span className="text-danger">*</span>
+                      </label>
+                      <textarea
+                        className={`form-control modal-smooth ${((testimonialSubmitted || testimonialTouched.content) && !testimonialModalForm.content.trim()) ? 'is-invalid' : ''}`}
+                        rows={4}
+                        value={testimonialModalForm.content}
+                        onChange={(e) => {
+                          setTestimonialTouched((p) => ({ ...p, content: true }));
+                          setTestimonialModalForm((p) => ({ ...p, content: e.target.value }));
+                        }}
+                        placeholder="Write the testimonial comment..."
+                      />
+                      {(testimonialSubmitted || testimonialTouched.content) && !testimonialModalForm.content.trim() && (
+                        <div className="invalid-feedback">Comment is required.</div>
+                      )}
+                    </div>
+
+                    <div className="col-md-12">
+                      <label className="form-label small fw-semibold text-dark mb-1">
+                        Avatar URL (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control modal-smooth"
+                        value={testimonialModalForm.image}
+                        onChange={(e) => setTestimonialModalForm((p) => ({ ...p, image: e.target.value }))}
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer border-top bg-white modal-smooth">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-smooth"
+                    onClick={() => {
+                      handleTestimonialCloseAttempt();
+                    }}
+                    disabled={testimonialSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-smooth"
+                    onClick={async () => {
+                      if (testimonialSaving) return;
+                      setTestimonialSaving(true);
+                      setTestimonialSubmitted(true);
+                      const orderValue = Number(testimonialModalForm.order || 1);
+                      const ratingValue = Number(testimonialModalForm.rating || 5);
+                      if (!Number.isFinite(orderValue) || orderValue < 1) {
+                        toast.error('Order must be a number greater than 0');
+                        setTestimonialSaving(false);
+                        return;
+                      }
+                      if (isDuplicateTestimonialOrder(orderValue, editingTestimonialItem?.id)) {
+                        toast.error('Order value is already used by another testimonial');
+                        setTestimonialSaving(false);
+                        return;
+                      }
+                      if (!Number.isFinite(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+                        toast.error('Rating must be between 1 and 5');
+                        setTestimonialSaving(false);
+                        return;
+                      }
+                      if (!testimonialModalForm.name.trim() || !testimonialModalForm.content.trim()) {
+                        toast.error('Author name and comment are required');
+                        setTestimonialSaving(false);
+                        return;
+                      }
+
+                      const base = {
+                        content: testimonialModalForm.content.trim(),
+                        name: testimonialModalForm.name.trim(),
+                        role: testimonialModalForm.role.trim(),
+                        rating: ratingValue,
+                        order: orderValue,
+                        is_active: testimonialModalForm.is_active,
+                        image: testimonialModalForm.image.trim(),
+                      };
+
+                      const next = editingTestimonialItem
+                        ? testimonialItems.map((t) => (t.id === editingTestimonialItem.id ? { ...t, ...base } : t))
+                        : [...testimonialItems, { id: `testimonial-${Date.now()}-${Math.random()}`, ...base }];
+
+                      const ok = await saveTestimonialItems(next, {
+                        loadingTitle: editingTestimonialItem ? 'Updating Testimonial' : 'Saving Testimonial',
+                        loadingText: 'Please wait...',
+                        successMessage: editingTestimonialItem ? 'Testimonial updated' : 'Testimonial created',
+                      });
+                      if (ok) {
+                        setTestimonialClosing(true);
+                        setTimeout(() => {
+                          setShowTestimonialModal(false);
+                          setTestimonialClosing(false);
+                        }, 180);
+                        setEditingTestimonialItem(null);
+                      }
+                      setTestimonialSaving(false);
+                    }}
+                    disabled={testimonialSaving}
+                  >
+                    {testimonialSaving ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                        Saving...
+                      </>
+                    ) : (
+                      <>{editingTestimonialItem ? 'Update Testimonial' : 'Save Testimonial'}</>
                     )}
                   </button>
                 </div>

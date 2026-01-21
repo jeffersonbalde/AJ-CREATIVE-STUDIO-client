@@ -7,18 +7,17 @@ const FilterAndSort = ({
   onCollectionChange,
   sortBy = 'Alphabetically, A-Z',
   onSortChange,
-  filters = { priceFrom: '', priceTo: '', categories: [] },
+  filters = { categories: [] },
   onFiltersChange,
   allCategories = [],
   categoryCounts = {},
-  highestPrice = 0,
   filteredCount = 0,
   totalCount = 0,
   onClearAll,
 }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [expandedFilter, setExpandedFilter] = useState(null); // 'price' | 'category' | null
-  const [filterView, setFilterView] = useState('main'); // 'main' | 'price' | 'category' | 'sort'
+  const [expandedFilter, setExpandedFilter] = useState(null); // 'category' | null
+  const [filterView, setFilterView] = useState('main'); // 'main' | 'category' | 'sort' | 'collection'
   const isScrollingRef = useRef(false); // Track if drawer is currently scrolling
   const scrollTimeoutRef = useRef(null); // Timeout to reset scrolling flag
 
@@ -88,14 +87,6 @@ const FilterAndSort = ({
     }
   }, [mobileDrawerOpen]);
 
-  const handlePriceFromChange = (value) => {
-    onFiltersChange({ ...filters, priceFrom: value });
-  };
-
-  const handlePriceToChange = (value) => {
-    onFiltersChange({ ...filters, priceTo: value });
-  };
-
   const handleCategoryToggle = (category) => {
     const exists = filters.categories.includes(category);
     onFiltersChange({
@@ -106,17 +97,11 @@ const FilterAndSort = ({
     });
   };
 
-  const handleResetPrice = () => {
-    onFiltersChange({ ...filters, priceFrom: '', priceTo: '' });
-  };
-
   const handleResetCategory = () => {
     onFiltersChange({ ...filters, categories: [] });
   };
 
   const hasActiveFilters =
-    filters.priceFrom !== '' ||
-    filters.priceTo !== '' ||
     filters.categories.length > 0 ||
     selectedCollectionId !== null;
 
@@ -375,33 +360,7 @@ const FilterAndSort = ({
                   </div>
                 </div>
 
-                {/* Price row */}
-                <div style={{ marginBottom: '2rem' }}>
-                  <div
-                    onClick={() => setFilterView('price')}
-                    className="mobile-filter-item"
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '1rem 0',
-                      borderBottom: '1px solid #E0E0E0',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: '1rem',
-                        color: '#000',
-                        fontWeight: 500,
-                      }}
-                    >
-                      Price
-                    </span>
-                    <span className="mobile-arrow-icon" style={{ fontSize: '1.25rem', color: '#666', transition: 'all 0.3s ease', display: 'inline-block' }}>→</span>
-                  </div>
-                </div>
+                {/* Price filter removed */}
 
                 {/* Category row */}
                 <div style={{ marginBottom: '2rem' }}>
@@ -523,179 +482,7 @@ const FilterAndSort = ({
               </motion.div>
             )}
 
-            {filterView === 'price' && (
-              <motion.div
-                key="price"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div
-                  onClick={() => setFilterView('main')}
-                  className="mobile-back-button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '1.5rem',
-                    cursor: 'pointer',
-                    padding: '0.5rem 0',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <span className="mobile-back-arrow" style={{ fontSize: '1.25rem', color: '#666', transition: 'all 0.3s ease', display: 'inline-block' }}>←</span>
-                  <span
-                    style={{
-                      fontSize: '1rem',
-                      color: '#000',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Price
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1.5rem',
-                    paddingBottom: '1rem',
-                    borderBottom: '1px solid #E0E0E0',
-                  }}
-                >
-                  <span style={{ fontSize: '0.95rem', color: '#666' }}>
-                    The highest price is ₱
-                    {highestPrice.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-                    <button
-                      onClick={handleResetPrice}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#000',
-                        textDecoration: 'underline',
-                        fontSize: '0.95rem',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.9rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      From
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.75rem 0.5rem',
-                          fontSize: '0.95rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceFrom}
-                        onChange={(e) => handlePriceFromChange(e.target.value)}
-                        placeholder="0"
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.75rem',
-                          border: 'none',
-                          fontSize: '0.95rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.9rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      To
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.75rem 0.5rem',
-                          fontSize: '0.95rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceTo}
-                        onChange={(e) => handlePriceToChange(e.target.value)}
-                        placeholder={highestPrice.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.75rem',
-                          border: 'none',
-                          fontSize: '0.95rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            {/* Price filter removed */}
 
             {filterView === 'category' && (
               <motion.div
@@ -1019,200 +806,7 @@ const FilterAndSort = ({
             </select>
           </div>
 
-          {/* Price panel */}
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() =>
-                setExpandedFilter(expandedFilter === 'price' ? null : 'price')
-              }
-              className="filter-dropdown-btn"
-              style={{
-                padding: '0.5rem 1rem',
-                border: '1px solid #CCCCCC',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-                cursor: 'pointer',
-                backgroundColor: expandedFilter === 'price' ? '#F5F5F5' : '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                minWidth: '120px',
-                justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-              }}
-            >
-              <span>Price</span>
-              <span 
-                style={{ 
-                  fontSize: '0.8rem',
-                  transition: 'transform 0.2s ease',
-                  transform: expandedFilter === 'price' ? 'rotate(180deg)' : 'rotate(0deg)',
-                }}
-              >
-                ▼
-              </span>
-            </button>
-            {expandedFilter === 'price' && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  marginTop: '0.5rem',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '4px',
-                  padding: '1rem',
-                  minWidth: '300px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  zIndex: 1000,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1rem',
-                    paddingBottom: '0.75rem',
-                    borderBottom: '1px solid #E0E0E0',
-                  }}
-                >
-                  <span style={{ fontSize: '0.9rem', color: '#666' }}>
-                    The highest price is ₱
-                    {highestPrice.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-                    <button
-                      onClick={handleResetPrice}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#000',
-                        textDecoration: 'underline',
-                        fontSize: '0.9rem',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    alignItems: 'flex-end',
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.85rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      From
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.5rem 0.4rem',
-                          fontSize: '0.9rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceFrom}
-                        onChange={(e) => handlePriceFromChange(e.target.value)}
-                        placeholder="0"
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          border: 'none',
-                          fontSize: '0.9rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '0.85rem',
-                        color: '#666',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
-                      To
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid #CCCCCC',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <span
-                        style={{
-                          padding: '0.5rem 0.4rem',
-                          fontSize: '0.9rem',
-                          color: '#666',
-                          backgroundColor: '#F5F5F5',
-                        }}
-                      >
-                        ₱
-                      </span>
-                      <input
-                        type="number"
-                        value={filters.priceTo}
-                        onChange={(e) => handlePriceToChange(e.target.value)}
-                        placeholder={highestPrice.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        min="0"
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          border: 'none',
-                          fontSize: '0.9rem',
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </div>
+          {/* Price filter removed */}
 
           {/* Category panel */}
           <div style={{ position: 'relative' }}>
@@ -1479,74 +1073,7 @@ const FilterAndSort = ({
             </div>
           )}
 
-          {(filters.priceFrom !== '' || filters.priceTo !== '') && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.5rem 0.75rem',
-                backgroundColor: '#F5F5F5',
-                borderRadius: '20px',
-                fontSize: '0.9rem',
-                color: '#333',
-              }}
-            >
-              <span>
-                ₱
-                {filters.priceFrom === ''
-                  ? '0'
-                  : parseFloat(filters.priceFrom).toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                - ₱
-                {filters.priceTo === ''
-                  ? highestPrice.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                  : parseFloat(filters.priceTo).toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-              </span>
-              <button
-                onClick={handleResetPrice}
-                className="filter-remove-btn"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                }}
-                aria-label="Remove price filter"
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ transition: 'all 0.2s ease' }}
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          )}
+          {/* Price filter removed */}
 
           {filters.categories.map((category) => (
             <div

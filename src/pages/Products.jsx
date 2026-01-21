@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmailSubscribeFooter from '../components/EmailSubscribeFooter';
 import FilterAndSort from '../components/FilterAndSort';
@@ -14,6 +14,19 @@ const createSlug = (title) => {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim();
+};
+
+const normalizePrice = (value) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/[^0-9.-]+/g, '');
+    const parsed = parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const parsed = parseFloat(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 // Sample products data - kept only as design fallback, main data now comes from API
@@ -406,12 +419,14 @@ const Products = () => {
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
-    priceFrom: '',
-    priceTo: '',
     categories: [], // multiple categories
   });
   const [sortBy, setSortBy] = useState('Alphabetically, A-Z');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const productsPerPage = 8;
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const apiBaseUrl =
     import.meta.env.VITE_LARAVEL_API ||
@@ -448,7 +463,7 @@ const Products = () => {
 
         const normalized = list.map((p) => {
           const title = p.title || p.name || '';
-          const price = parseFloat(p.price ?? 0);
+          const price = normalizePrice(p.price);
           return {
             ...p,
             title,
@@ -502,7 +517,7 @@ const Products = () => {
             const normalizedProducts = Array.isArray(c.products)
               ? c.products.map((p) => {
                   const title = p.title || p.name || '';
-                  const price = parseFloat(p.price ?? 0);
+                  const price = normalizePrice(p.price);
                   return {
                     ...p,
                     title,
@@ -533,27 +548,6 @@ const Products = () => {
     fetchCollections();
   }, [apiBaseUrl]);
 
-  // Category counts and list (only categories that actually have products)
-  const categoryCounts = useMemo(() => {
-    const counts = {};
-    sourceProducts.forEach((p) => {
-      if (!p.category) return;
-      counts[p.category] = (counts[p.category] || 0) + 1;
-    });
-    return counts;
-  }, [sourceProducts]);
-
-  const allCategories = useMemo(
-    () => Object.keys(categoryCounts).sort(),
-    [categoryCounts]
-  );
-
-  // Highest price
-  const highestPrice = useMemo(
-    () => (sourceProducts.length ? Math.max(...sourceProducts.map((p) => p.price || 0), 0) : 0),
-    [sourceProducts]
-  );
-
   // Filter collections to only show those with products
   const collectionsWithProducts = useMemo(() => {
     return collections.filter((collection) => {
@@ -562,8 +556,34 @@ const Products = () => {
     });
   }, [collections]);
 
-  // Filter + sort
-  const filteredAndSortedProducts = useMemo(() => {
+  // Sync search term from URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const term = params.get('search') || '';
+    setSearchTerm(term);
+    setSearchInput(term);
+    setCurrentPage(1);
+  }, [location.search]);
+
+  const handleSearchSubmit = (event) => {
+    event.preventDefault();
+    const trimmed = searchInput.trim();
+    if (trimmed) {
+      navigate(`/all-products?search=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate('/all-products');
+    }
+  };
+
+  const handleSearchClear = () => {
+    setSearchInput('');
+    if (searchTerm) {
+      navigate('/all-products');
+    }
+  };
+
+  // Base products after collection + search term
+  const baseFilteredProducts = useMemo(() => {
     let filtered = [];
 
     // If a collection is selected and it has products, use those products
@@ -596,17 +616,46 @@ const Products = () => {
       filtered = [...sourceProducts];
     }
 
+    // Apply search term
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (normalizedSearch) {
+      filtered = filtered.filter((p) => {
+        const title = (p.title || '').toLowerCase();
+        const subtitle = (p.subtitle || '').toLowerCase();
+        const category = (p.category || '').toLowerCase();
+        return (
+          title.includes(normalizedSearch) ||
+          subtitle.includes(normalizedSearch) ||
+          category.includes(normalizedSearch)
+        );
+      });
+    }
+
+    return filtered;
+  }, [sourceProducts, selectedCollectionId, collections, searchTerm]);
+
+  // Category counts and list (only categories that actually have products)
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    baseFilteredProducts.forEach((p) => {
+      if (!p.category) return;
+      counts[p.category] = (counts[p.category] || 0) + 1;
+    });
+    return counts;
+  }, [baseFilteredProducts]);
+
+  const allCategories = useMemo(
+    () => Object.keys(categoryCounts).sort(),
+    [categoryCounts]
+  );
+
+  // Filter + sort
+  const filteredAndSortedProducts = useMemo(() => {
+    let filtered = [...baseFilteredProducts];
+
     // Apply category filters
     if (filters.categories.length > 0) {
       filtered = filtered.filter(p => filters.categories.includes(p.category));
-    }
-
-    // Apply price filters
-    if (filters.priceFrom !== '' || filters.priceTo !== '') {
-      const from = filters.priceFrom === '' ? 0 : parseFloat(filters.priceFrom);
-      const to =
-        filters.priceTo === '' ? Infinity : parseFloat(filters.priceTo);
-      filtered = filtered.filter(p => p.price >= from && p.price <= to);
     }
 
     // Apply sorting
@@ -618,10 +667,10 @@ const Products = () => {
         filtered.sort((a, b) => b.title.localeCompare(a.title));
         break;
       case 'Price, low to high':
-        filtered.sort((a, b) => a.price - b.price);
+        filtered.sort((a, b) => normalizePrice(a.price) - normalizePrice(b.price));
         break;
       case 'Price, high to low':
-        filtered.sort((a, b) => b.price - a.price);
+        filtered.sort((a, b) => normalizePrice(b.price) - normalizePrice(a.price));
         break;
       case 'Date, new to old':
         filtered = [...filtered].reverse();
@@ -632,7 +681,7 @@ const Products = () => {
     }
 
     return filtered;
-  }, [filters, sortBy, sourceProducts, selectedCollectionId, collections]);
+  }, [filters, sortBy, baseFilteredProducts]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedProducts.length / productsPerPage);
@@ -648,7 +697,7 @@ const Products = () => {
   };
 
   const handleRemoveAll = () => {
-    setFilters({ priceFrom: '', priceTo: '', categories: [] });
+    setFilters({ categories: [] });
     setSelectedCollectionId(null);
     setSortBy('Alphabetically, A-Z');
     setCurrentPage(1);
@@ -717,6 +766,55 @@ const Products = () => {
             Products
           </motion.h1>
 
+          {/* Search results header + search bar */}
+          {searchTerm && (
+            <div className="products-search-header">
+              <h2 className="products-search-title">Search results</h2>
+              <form className="products-search-form" onSubmit={handleSearchSubmit}>
+                <div className="products-search-input-wrapper">
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="Search"
+                    className="products-search-input"
+                    aria-label="Search products"
+                  />
+                  {searchInput && (
+                    <button
+                      type="button"
+                      className="products-search-clear"
+                      aria-label="Clear search"
+                      onClick={handleSearchClear}
+                    >
+                      ×
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="products-search-submit"
+                    aria-label="Submit search"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <line x1="16.65" y1="16.65" x2="21" y2="21" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* Filter and Sort Component */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -743,9 +841,8 @@ const Products = () => {
               }}
               allCategories={allCategories}
               categoryCounts={categoryCounts}
-              highestPrice={highestPrice}
               filteredCount={filteredAndSortedProducts.length}
-              totalCount={sourceProducts.length}
+              totalCount={baseFilteredProducts.length}
               onClearAll={handleRemoveAll}
             />
           </motion.div>
@@ -1292,6 +1389,87 @@ const Products = () => {
           opacity: 0.5;
         }
         
+        .products-search-header {
+          margin-bottom: 1.5rem;
+        }
+
+        .products-search-title {
+          font-size: clamp(1.25rem, 3vw, 1.75rem);
+          font-weight: 700;
+          color: #000;
+          margin: 0 0 0.75rem 0;
+          text-align: center;
+        }
+
+        .products-search-form {
+          display: flex;
+          justify-content: center;
+          width: 100%;
+        }
+
+        .products-search-input-wrapper {
+          width: min(600px, 100%);
+          display: flex;
+          align-items: center;
+          border: 1px solid #cfcfcf;
+          border-radius: 10px;
+          padding: 0 10px;
+          background-color: #fff;
+          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03), 0 4px 10px rgba(0, 0, 0, 0.06);
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .products-search-input-wrapper:focus-within {
+          border-color: #111;
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.08);
+        }
+
+        .products-search-input {
+          flex: 1;
+          border: none;
+          outline: none;
+          padding: 10px 8px;
+          font-size: 0.95rem;
+          color: #111;
+          background: transparent;
+        }
+
+        .products-search-input::placeholder {
+          color: #777;
+        }
+
+        .products-search-submit {
+          border: none;
+          background: transparent;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px;
+          color: #111;
+          cursor: pointer;
+        }
+
+        .products-search-clear {
+          border: none;
+          background: transparent;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px 10px;
+          font-size: 1.6rem;
+          line-height: 1;
+          color: #666;
+          cursor: pointer;
+          border-radius: 999px;
+          transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        .products-search-clear:hover {
+          background-color: #f2f2f2;
+          color: #111;
+          transform: scale(1.05);
+        }
+
         @media (max-width: 768px) {
           /* Prevent horizontal scroll on mobile - Stronger constraints (excluding navbar) */
           html, body {
