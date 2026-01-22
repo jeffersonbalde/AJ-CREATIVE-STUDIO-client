@@ -1,6 +1,7 @@
 // src/pages/admin/AdminDashboard.jsx
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import {
   FaUsers,
   FaFileInvoice,
@@ -42,6 +43,7 @@ const formatDateTime = (value) => {
 
 export default function AdminDashboard() {
   const { admin, token } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
@@ -213,6 +215,11 @@ export default function AdminDashboard() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchDashboardStats(false);
+  };
+
+  const handleQuickAction = (path) => {
+    if (!path) return;
+    navigate(path);
   };
 
   if (loading) {
@@ -602,40 +609,43 @@ export default function AdminDashboard() {
             <div className="card-body">
               <div className="d-grid gap-2">
                 <button
-                  className="btn btn-sm text-start py-2 d-flex align-items-center"
+                  className="btn btn-sm text-start py-2 d-flex align-items-center admin-quick-action-btn"
+                  type="button"
+                  onClick={() => handleQuickAction("/admin/customers")}
                   style={{
                     borderRadius: "8px",
                     border: "2px solid var(--primary-color)",
                     color: "var(--primary-color)",
-                    backgroundColor: "transparent",
                   }}
                 >
                   <FaUsers className="me-2" />
-                  Customer Management
+                  Manage Customers
                 </button>
                 <button
-                  className="btn btn-sm text-start py-2 d-flex align-items-center"
+                  className="btn btn-sm text-start py-2 d-flex align-items-center admin-quick-action-btn"
+                  type="button"
+                  onClick={() => handleQuickAction("/admin/orders")}
                   style={{
                     borderRadius: "8px",
                     border: "2px solid var(--primary-color)",
                     color: "var(--primary-color)",
-                    backgroundColor: "transparent",
                   }}
                 >
                   <FaFileInvoice className="me-2" />
-                  Billing & Invoices
+                  View Orders
                 </button>
                 <button
-                  className="btn btn-sm text-start py-2 d-flex align-items-center"
+                  className="btn btn-sm text-start py-2 d-flex align-items-center admin-quick-action-btn"
+                  type="button"
+                  onClick={() => handleQuickAction("/admin/products/reviews")}
                   style={{
                     borderRadius: "8px",
                     border: "2px solid var(--primary-color)",
                     color: "var(--primary-color)",
-                    backgroundColor: "transparent",
                   }}
                 >
                   <FaChartBar className="me-2" />
-                  Analytics & Reports
+                  Product Reviews
                 </button>
               </div>
             </div>

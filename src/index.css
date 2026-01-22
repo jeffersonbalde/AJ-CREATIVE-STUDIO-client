@@ -1142,6 +1142,28 @@ body {
   padding-top: 0;
 }
 
+/* Admin Dashboard - Quick Actions hover */
+.admin-quick-action-btn {
+  background-color: transparent;
+  transition: background-color 0.2s ease, transform 0.2s ease,
+    box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-quick-action-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+}
+
+.admin-quick-action-btn:active {
+  background-color: rgba(0, 0, 0, 0.06);
+  transform: translateY(0);
+}
+
+.admin-quick-action-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.12);
+}
+
 /* Stats card improvements */
 .stats-card {
   background-color: var(--background-white);

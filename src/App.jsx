@@ -29,6 +29,7 @@ import CustomerList from './pages/admin/CustomerList';
 import EmailSubscribers from './pages/admin/EmailSubscribers';
 import TimeLogging from './pages/admin/TimeLogging';
 import OrderList from './pages/admin/OrderList';
+import AdminSettings from './pages/admin/AdminSettings';
 import SidebarLayout from './layout/SidebarLayout';
 import { CartProvider } from './contexts/CartContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -265,12 +266,7 @@ const AppContent = () => {
               path="/admin/settings"
               element={
                 <ProtectedRoute>
-                  <SidebarLayout>
-                    <div className="container-fluid px-3 py-2">
-                      <h1>Settings</h1>
-                      <p>Settings page coming soon...</p>
-                    </div>
-                  </SidebarLayout>
+                  <SidebarLayout><AdminSettings /></SidebarLayout>
                 </ProtectedRoute>
               }
             />

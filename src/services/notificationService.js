@@ -9,6 +9,8 @@ export const showAlert = {
       text,
       confirmButtonColor: '#28a745',
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false, // Prevent layout shift when SweetAlert opens/closes
+      heightAuto: false, // Avoid height-based layout jumps
       ...options,
     });
   },
@@ -20,6 +22,8 @@ export const showAlert = {
       text,
       confirmButtonColor: '#dc3545',
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       ...options,
     });
   },
@@ -31,6 +35,8 @@ export const showAlert = {
       text,
       confirmButtonColor: '#ffc107',
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       ...options,
     });
   },
@@ -42,6 +48,8 @@ export const showAlert = {
       text,
       confirmButtonColor: '#17a2b8',
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       ...options,
     });
   },
@@ -55,6 +63,8 @@ export const showAlert = {
       allowEnterKey: false,
       showConfirmButton: false,
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       didOpen: () => {
         Swal.showLoading();
       },
@@ -71,6 +81,8 @@ export const showAlert = {
       allowEnterKey: false,
       showConfirmButton: false,
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       didOpen: () => {
         Swal.showLoading();
       },
@@ -93,6 +105,8 @@ export const showAlert = {
         popup: 'swal2-high-zindex-popup',
       },
       zIndex: 100000, // Ensure it's above modals
+      scrollbarPadding: false,
+      heightAuto: false,
       ...options,
     });
   },
